@@ -1,4 +1,4 @@
-name: Sync Airtable invoices to Sellsy
+name: Sync Airtable invoices to Sellsy by Email
 
 on:
   schedule:
@@ -29,6 +29,10 @@ jobs:
           AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
           AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
           AIRTABLE_TABLE_NAME: ${{ secrets.AIRTABLE_TABLE_NAME }}
-          SELLSY_CLIENT_ID: ${{ secrets.SELLSY_CLIENT_ID }}
-          SELLSY_CLIENT_SECRET: ${{ secrets.SELLSY_CLIENT_SECRET }}
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_OCR_TO: ${{ secrets.EMAIL_OCR_TO }}
         run: python sync_process.py
