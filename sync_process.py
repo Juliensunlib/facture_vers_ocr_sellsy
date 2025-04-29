@@ -4,7 +4,6 @@ Script principal pour synchroniser les factures fournisseurs d'Airtable vers Sel
 import os
 import logging
 import time
-import sys
 from airtable_api import AirtableAPI
 from email_sender import EmailSender
 from config import BATCH_SIZE, AIRTABLE_INVOICE_FILE_COLUMNS, AIRTABLE_SYNC_STATUS_COLUMNS, AIRTABLE_SYNCED_COLUMN
@@ -16,16 +15,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger("sync_process")
 
-def sync_invoices_to_sellsy(limit=None):
+def sync_invoices_to_sellsy():
     """
     Synchronise les factures fournisseurs d'Airtable vers Sellsy via email OCR
     Logique améliorée :
     1. Vérification du statut global de synchronisation
     2. Traitement des factures non synchronisées uniquement
     3. Mise à jour du statut global lorsque toutes les factures sont synchronisées
-    
-    Args:
-        limit (int, optional): Nombre maximum d'enregistrements à traiter
     """
     logger.info("Démarrage de la synchronisation Airtable -> Sellsy (via email OCR)")
     
@@ -34,8 +30,7 @@ def sync_invoices_to_sellsy(limit=None):
     email_client = EmailSender()
     
     # Récupérer les enregistrements avec des factures non synchronisées
-    batch_size = limit if limit else BATCH_SIZE
-    unsync_records = airtable.get_unsynchronized_invoices(limit=batch_size)
+    unsync_records = airtable.get_unsynchronized_invoices(limit=BATCH_SIZE)
     
     if not unsync_records:
         logger.info("Aucune facture à synchroniser")
@@ -174,150 +169,9 @@ def sync_invoices_to_sellsy(limit=None):
     # Résumé de la synchronisation
     logger.info(f"Synchronisation terminée: {success_count} factures envoyées par email, {error_count} erreurs")
 
-def reset_sync_status(record_id, file_column=None):
-    """
-    Réinitialise le statut de synchronisation pour permettre une nouvelle synchronisation
-    
-    Args:
-        record_id (str): ID de l'enregistrement Airtable
-        file_column (str, optional): Colonne spécifique à réinitialiser, ou None pour toutes
-    
-    Returns:
-        bool: True si la réinitialisation a réussi
-    """
-    try:
-        airtable = AirtableAPI()
-        
-        if file_column:
-            # Réinitialiser une colonne spécifique
-            sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(file_column)
-            if not sync_column:
-                logger.error(f"Colonne de synchronisation non trouvée pour {file_column}")
-                return False
-                
-            # Mettre à jour uniquement cette colonne
-            update_data = {sync_column: False}
-            result = airtable.table.update(record_id, update_data)
-            
-            # Mettre également à jour le statut global si nécessaire
-            airtable.set_global_sync_status(record_id, False)
-            
-            logger.info(f"Statut de synchronisation réinitialisé pour {file_column} dans l'enregistrement {record_id}")
-            return True
-            
-        else:
-            # Réinitialiser toutes les colonnes
-            update_data = {AIRTABLE_SYNCED_COLUMN: False}
-            
-            for column in AIRTABLE_INVOICE_FILE_COLUMNS:
-                sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
-                if sync_column:
-                    update_data[sync_column] = False
-            
-            result = airtable.table.update(record_id, update_data)
-            logger.info(f"Tous les statuts de synchronisation réinitialisés pour l'enregistrement {record_id}")
-            return True
-            
-    except Exception as e:
-        logger.error(f"Erreur lors de la réinitialisation du statut: {e}")
-        return False
-
-def list_sync_status(record_id=None, limit=10):
-    """
-    Affiche le statut de synchronisation des enregistrements
-    
-    Args:
-        record_id (str, optional): ID d'un enregistrement spécifique
-        limit (int, optional): Nombre maximum d'enregistrements à afficher
-    """
-    try:
-        airtable = AirtableAPI()
-        
-        if record_id:
-            # Afficher un enregistrement spécifique
-            statuses = airtable.get_all_file_statuses(record_id)
-            has_attachments, all_synced = airtable.check_global_sync_status(record_id)
-            
-            print(f"\nStatut de synchronisation pour l'enregistrement {record_id}:")
-            print(f"Statut global: {'Synchronisé' if all_synced else 'Non synchronisé'}")
-            
-            for column, status in statuses.items():
-                if status['has_file']:
-                    sync_status = "Synchronisé" if status['is_synced'] else "Non synchronisé"
-                    print(f"  {column}: {sync_status} - {status['file_name']}")
-                    
-        else:
-            # Afficher les enregistrements non synchronisés
-            records = airtable.get_unsynchronized_invoices(limit=limit)
-            
-            print(f"\n{len(records)} enregistrements avec des factures non synchronisées:")
-            
-            for record in records:
-                record_id = record.get('id')
-                fields = record.get('fields', {})
-                
-                subscriber_id = fields.get(airtable.AIRTABLE_SUBSCRIBER_ID_COLUMN, "")
-                first_name = fields.get(airtable.AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN, "")
-                last_name = fields.get(airtable.AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN, "")
-                
-                print(f"\nEnregistrement {record_id} - {first_name} {last_name} ({subscriber_id}):")
-                
-                for column in AIRTABLE_INVOICE_FILE_COLUMNS:
-                    attachments = fields.get(column, [])
-                    
-                    if attachments:
-                        sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
-                        is_synced = fields.get(sync_column, False) if sync_column else False
-                        
-                        sync_status = "Synchronisé" if is_synced else "Non synchronisé"
-                        print(f"  {column}: {sync_status} - {attachments[0].get('filename')}")
-    
-    except Exception as e:
-        logger.error(f"Erreur lors de l'affichage des statuts: {e}")
-
 if __name__ == "__main__":
     try:
-        # Récupérer les arguments de la ligne de commande
-        if len(sys.argv) > 1:
-            cmd = sys.argv[1]
-            
-            if cmd == "sync":
-                # Synchroniser avec limite optionnelle
-                limit = int(sys.argv[2]) if len(sys.argv) > 2 else None
-                sync_invoices_to_sellsy(limit)
-                
-            elif cmd == "reset":
-                # Réinitialiser le statut
-                if len(sys.argv) > 2:
-                    record_id = sys.argv[2]
-                    
-                    if len(sys.argv) > 3:
-                        # Réinitialiser une colonne spécifique
-                        file_column = sys.argv[3]
-                        reset_sync_status(record_id, file_column)
-                    else:
-                        # Réinitialiser toutes les colonnes
-                        reset_sync_status(record_id)
-                else:
-                    print("Erreur: ID d'enregistrement requis pour la réinitialisation")
-                    
-            elif cmd == "status":
-                # Afficher le statut
-                if len(sys.argv) > 2:
-                    record_id = sys.argv[2]
-                    list_sync_status(record_id)
-                else:
-                    limit = int(sys.argv[3]) if len(sys.argv) > 3 else 10
-                    list_sync_status(limit=limit)
-                    
-            else:
-                # Commande inconnue
-                print(f"Commande inconnue: {cmd}")
-                print("Commandes disponibles: sync, reset, status")
-        else:
-            # Exécution par défaut
-            sync_invoices_to_sellsy()
-            
+        sync_invoices_to_sellsy()
     except Exception as e:
         logger.critical(f"Erreur critique lors de la synchronisation: {e}")
         exit(1)
