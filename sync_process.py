@@ -25,47 +25,52 @@ def sync_invoices_to_sellsy():
     airtable = AirtableAPI()
     sellsy = SellsyAPIV2()
     
-    # Récupérer les factures non synchronisées créées aujourd'hui
-    unsync_invoices = airtable.get_unsynchronized_invoices(limit=BATCH_SIZE)
+    # Récupérer les enregistrements avec des factures non synchronisées créées aujourd'hui
+    unsync_records = airtable.get_unsynchronized_invoices(limit=BATCH_SIZE)
     
-    if not unsync_invoices:
+    if not unsync_records:
         logger.info("Aucune facture à synchroniser")
         return
         
-    logger.info(f"Traitement de {len(unsync_invoices)} factures")
+    logger.info(f"Traitement de {len(unsync_records)} enregistrements")
     
     # Compteurs pour le suivi
     success_count = 0
     error_count = 0
     
-    # Traiter chaque facture
-    for record in unsync_invoices:
+    # Traiter chaque enregistrement
+    for record in unsync_records:
         record_id = record.get('id')
+        
+        # Trouver la prochaine colonne de facture non synchronisée
+        file_column = airtable.get_next_unsynchronized_file(record)
+        
+        if not file_column:
+            logger.warning(f"Aucune facture non synchronisée trouvée pour l'enregistrement {record_id}")
+            continue
+            
         try:
             # Extraire les données minimales de la facture
-            invoice_data = airtable.get_invoice_data(record)
+            invoice_data = airtable.get_invoice_data(record, file_column)
             
             if not invoice_data:
                 logger.warning(f"Données de facture invalides pour l'enregistrement {record_id}")
                 error_count += 1
                 continue
                 
-            # Télécharger le fichier PDF et récupérer la colonne source
-            pdf_path, file_column = airtable.download_invoice_file(record)
+            # Télécharger le fichier PDF
+            pdf_path = airtable.download_invoice_file(record, file_column)
             
             if not pdf_path:
-                logger.warning(f"Impossible de télécharger le fichier PDF pour l'enregistrement {record_id}")
+                logger.warning(f"Impossible de télécharger le fichier PDF depuis {file_column} pour l'enregistrement {record_id}")
                 error_count += 1
                 continue
                 
-            # Mettre à jour le chemin du fichier dans les données
-            invoice_data["file_path"] = pdf_path
-            
             # Envoyer à l'OCR Sellsy - sans métadonnées précises, l'OCR fera le travail d'extraction
             ocr_result = sellsy.send_invoice_to_ocr(invoice_data, pdf_path)
             
             if not ocr_result:
-                logger.error(f"Échec de l'envoi à l'OCR pour l'enregistrement {record_id}")
+                logger.error(f"Échec de l'envoi à l'OCR pour la facture dans {file_column}, enregistrement {record_id}")
                 error_count += 1
                 continue
                 
@@ -80,8 +85,8 @@ def sync_invoices_to_sellsy():
                 elif "docId" in ocr_result:
                     sellsy_id = ocr_result["docId"]
             
-            # Marquer comme synchronisé dans Airtable avec la colonne source
-            airtable.mark_as_synchronized(record_id, sellsy_id, file_column)
+            # Marquer cette facture spécifique comme synchronisée dans Airtable
+            airtable.mark_file_as_synchronized(record_id, file_column, sellsy_id)
             
             logger.info(f"Facture depuis la colonne {file_column} synchronisée avec succès (Sellsy ID: {sellsy_id})")
             success_count += 1
@@ -90,7 +95,7 @@ def sync_invoices_to_sellsy():
             time.sleep(1)
             
         except Exception as e:
-            logger.error(f"Erreur lors du traitement de l'enregistrement {record_id}: {e}")
+            logger.error(f"Erreur lors du traitement de la facture dans {file_column}, enregistrement {record_id}: {e}")
             error_count += 1
     
     # Résumé de la synchronisation
