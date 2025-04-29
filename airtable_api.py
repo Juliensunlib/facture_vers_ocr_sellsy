@@ -1,14 +1,13 @@
 """
-Client pour l'API Airtable - Récupération des factures fournisseurs
-Version mise à jour avec la nouvelle logique de synchronisation
+Client corrigé pour l'API Airtable - Récupération des factures fournisseurs
+Adaptation pour tenir compte des champs manquants ou différents
 """
 from pyairtable import Table
 import requests
 import os
 import tempfile
-from datetime import datetime
 import logging
-from config import (
+from config_fixed import (
     AIRTABLE_API_KEY, 
     AIRTABLE_BASE_ID, 
     AIRTABLE_TABLE_NAME,
@@ -35,6 +34,60 @@ class AirtableAPI:
         """Initialise la connexion à l'API Airtable"""
         self.table = Table(AIRTABLE_API_KEY, AIRTABLE_BASE_ID, AIRTABLE_TABLE_NAME)
         logger.info(f"Connexion à Airtable établie pour la table {AIRTABLE_TABLE_NAME}")
+        
+        # CORRECTION: Vérifier quels champs existent réellement dans la table
+        self._check_table_structure()
+    
+    def _check_table_structure(self):
+        """
+        Vérifie la structure de la table Airtable pour déterminer quels champs existent réellement
+        """
+        try:
+            # Récupérer un enregistrement pour observer sa structure
+            record = self.table.first()
+            if not record:
+                logger.warning("Table vide ou inaccessible, impossible de vérifier sa structure")
+                return
+                
+            fields = record.get('fields', {})
+            field_names = set(fields.keys())
+            
+            # Vérifier les champs globaux
+            self.has_subscriber_id = AIRTABLE_SUBSCRIBER_ID_COLUMN in field_names
+            self.has_firstname = AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN in field_names
+            self.has_lastname = AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN in field_names
+            self.has_global_sync = AIRTABLE_SYNCED_COLUMN in field_names
+            
+            # Vérifier les champs de status de synchronisation
+            self.sync_status_columns = {}
+            for file_col, status_col in AIRTABLE_SYNC_STATUS_COLUMNS.items():
+                if file_col in field_names and status_col in field_names:
+                    self.sync_status_columns[file_col] = status_col
+                    
+            # Vérifier les champs d'ID Sellsy
+            self.sellsy_id_columns = {}
+            for file_col, id_col in AIRTABLE_SELLSY_ID_COLUMNS.items():
+                if file_col in field_names and id_col in field_names:
+                    self.sellsy_id_columns[file_col] = id_col
+                    
+            # Journaliser les résultats
+            logger.info(f"Structure de table détectée:")
+            logger.info(f"  - Champ ID Abonné: {self.has_subscriber_id}")
+            logger.info(f"  - Champ Prénom: {self.has_firstname}")
+            logger.info(f"  - Champ Nom: {self.has_lastname}")
+            logger.info(f"  - Statut global de synchronisation: {self.has_global_sync}")
+            logger.info(f"  - Colonnes de statut de synchronisation: {len(self.sync_status_columns)}")
+            logger.info(f"  - Colonnes d'ID Sellsy: {len(self.sellsy_id_columns)}")
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la vérification de la structure de la table: {e}")
+            # Initialiser avec des valeurs par défaut en cas d'échec
+            self.has_subscriber_id = False
+            self.has_firstname = False
+            self.has_lastname = False
+            self.has_global_sync = False
+            self.sync_status_columns = AIRTABLE_SYNC_STATUS_COLUMNS
+            self.sellsy_id_columns = {}
 
     def get_unsynchronized_invoices(self, limit=None):
         """
@@ -65,12 +118,18 @@ class AirtableAPI:
                 has_unsync_file = False
                 
                 for column in AIRTABLE_INVOICE_FILE_COLUMNS:
+                    # Vérifier si la colonne de fichier existe dans l'enregistrement
                     attachments = fields.get(column, [])
                     if attachments:
-                        sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
-                        is_synced = fields.get(sync_column, False) if sync_column else False
-                        
-                        if not is_synced:
+                        # Utiliser la colonne de statut correspondante si elle existe
+                        sync_column = self.sync_status_columns.get(column)
+                        if sync_column:
+                            is_synced = fields.get(sync_column, False)
+                            if not is_synced:
+                                has_unsync_file = True
+                                break
+                        else:
+                            # Si la colonne de statut n'existe pas, considérer comme non synchronisé
                             has_unsync_file = True
                             break
                 
@@ -97,15 +156,21 @@ class AirtableAPI:
         fields = record.get('fields', {})
         
         for column in AIRTABLE_INVOICE_FILE_COLUMNS:
+            # Vérifier si la colonne existe et contient un fichier
             attachments = fields.get(column, [])
-            sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
-            
-            # Vérifier si la colonne a un fichier
-            if attachments:
-                # Vérifier si la colonne n'est pas marquée comme synchronisée (FALSE ou BLANK)
-                is_synced = fields.get(sync_column, False) if sync_column else False
+            if not attachments:
+                continue
+                
+            # Vérifier si la colonne de statut existe
+            sync_column = self.sync_status_columns.get(column)
+            if sync_column:
+                # Vérifier si elle n'est pas synchronisée
+                is_synced = fields.get(sync_column, False)
                 if not is_synced:
                     return column
+            else:
+                # Si pas de colonne de statut, considérer comme non synchronisée
+                return column
         
         return None
 
@@ -172,14 +237,11 @@ class AirtableAPI:
         """
         try:
             # Identifier la colonne de statut correspondante
-            sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(file_column)
+            sync_column = self.sync_status_columns.get(file_column)
             
             if not sync_column:
-                logger.error(f"Colonne de statut de synchronisation non trouvée pour {file_column}")
+                logger.warning(f"Colonne de statut de synchronisation non trouvée pour {file_column}. Impossible de marquer comme synchronisé.")
                 return False
-            
-            # Identifier la colonne pour stocker l'ID Sellsy si applicable
-            sellsy_id_column = AIRTABLE_SELLSY_ID_COLUMNS.get(file_column)
             
             # Logging des valeurs avant mise à jour
             logger.info(f"Mise à jour pour le record {record_id}, colonne de statut {sync_column}")
@@ -190,6 +252,7 @@ class AirtableAPI:
             }
             
             # Si un ID Sellsy est fourni et qu'une colonne dédiée existe, l'ajouter
+            sellsy_id_column = self.sellsy_id_columns.get(file_column)
             if sellsy_id and sellsy_id_column:
                 update_data[sellsy_id_column] = sellsy_id
                 logger.info(f"Stockage de l'ID Sellsy {sellsy_id} dans la colonne {sellsy_id_column}")
@@ -203,10 +266,11 @@ class AirtableAPI:
             # Log de débogage - Afficher le résultat de la mise à jour
             logger.info(f"Résultat de la mise à jour: {result}")
             
-            logger.info(f"Facture dans {file_column} marquée comme synchronisée pour l'enregistrement {record_id} (Sellsy ID: {sellsy_id})")
+            logger.info(f"Facture dans {file_column} marquée comme synchronisée pour l'enregistrement {record_id}")
             
-            # Mettre à jour le statut global
-            self._update_global_sync_status(record_id)
+            # Mettre à jour le statut global si nécessaire
+            if self.has_global_sync:
+                self._update_global_sync_status(record_id)
             
             return True
         except Exception as e:
@@ -216,10 +280,15 @@ class AirtableAPI:
     def _update_global_sync_status(self, record_id):
         """
         Met à jour le statut global de synchronisation si toutes les factures sont synchronisées
+        (Uniquement utilisé si le champ global existe)
         
         Args:
             record_id (str): ID de l'enregistrement Airtable
         """
+        # Ne rien faire si le champ global n'existe pas
+        if not self.has_global_sync:
+            return
+            
         try:
             # Récupérer l'enregistrement complet pour obtenir les statuts à jour
             record = self.table.get(record_id)
@@ -229,7 +298,6 @@ class AirtableAPI:
                 
             fields = record.get('fields', {})
             
-            # Variables pour le suivi
             all_synced = True
             has_attachments = False
             
@@ -240,38 +308,28 @@ class AirtableAPI:
                 # Si cette colonne a un fichier attaché
                 if attachments:
                     has_attachments = True
-                    sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
+                    sync_column = self.sync_status_columns.get(column)
                     
-                    # Vérifier si le statut est explicitement True
-                    # Si le champ n'existe pas (None) ou est False, considérer comme non synchronisé
-                    sync_status = fields.get(sync_column, False)
-                    if not sync_status:
+                    if sync_column:
+                        # Vérifier si le statut est explicitement True
+                        sync_status = fields.get(sync_column, False)
+                        if not sync_status:
+                            all_synced = False
+                            break
+                    else:
+                        # Si pas de colonne de statut, considérer comme non synchronisé
                         all_synced = False
-                        logger.info(f"La colonne {column} n'est pas synchronisée, statut global reste à False")
                         break
             
-            logger.info(f"État de synchronisation pour record {record_id}: has_attachments={has_attachments}, all_synced={all_synced}")
-            
-            # Mettre à jour le statut global uniquement si tout est synchronisé ET il y a au moins une pièce jointe
-            current_global_status = fields.get(AIRTABLE_SYNCED_COLUMN, False)
-            
+            # Mettre à jour le statut global uniquement si tout est synchronisé ET il y a des pièces jointes
             if has_attachments:
-                if all_synced and not current_global_status:
-                    # Si tout est synchronisé mais le statut global est False ou absent
-                    update_result = self.table.update(record_id, {
-                        AIRTABLE_SYNCED_COLUMN: True
+                current_global_status = fields.get(AIRTABLE_SYNCED_COLUMN, False)
+                
+                if all_synced != current_global_status:
+                    self.table.update(record_id, {
+                        AIRTABLE_SYNCED_COLUMN: all_synced
                     })
-                    logger.info(f"Toutes les factures sont synchronisées - Champ global mis à jour à TRUE pour {record_id}")
-                    logger.debug(f"Résultat mise à jour globale: {update_result}")
-                elif not all_synced and current_global_status:
-                    # Si au moins une facture n'est pas synchronisée et le statut global est True
-                    update_result = self.table.update(record_id, {
-                        AIRTABLE_SYNCED_COLUMN: False
-                    })
-                    logger.info(f"Certaines factures ne sont pas synchronisées - Champ global mis à jour à FALSE pour {record_id}")
-                    logger.debug(f"Résultat mise à jour globale: {update_result}")
-            else:
-                logger.info(f"Aucune pièce jointe trouvée pour l'enregistrement {record_id} - Aucune mise à jour du statut global")
+                    logger.info(f"Statut global mis à jour à {all_synced} pour l'enregistrement {record_id}")
         
         except Exception as e:
             logger.error(f"Erreur lors de la mise à jour du statut global: {e}")
@@ -289,164 +347,30 @@ class AirtableAPI:
         """
         fields = record.get('fields', {})
         
-        # Récupérer le numéro d'abonné si disponible
-        subscriber_id = fields.get(AIRTABLE_SUBSCRIBER_ID_COLUMN, "")
-        
-        # Récupérer le nom et prénom si disponibles
-        first_name = fields.get(AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN, "")
-        last_name = fields.get(AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN, "")
-        
-        # Structure minimale pour l'envoi à l'OCR
+        # Structure minimale pour l'OCR
         invoice_data = {
             "record_id": record.get('id'),
-            "subscriber_id": subscriber_id,
             "file_column": file_column,
-            "first_name": first_name,
-            "last_name": last_name,
-            "reference": "",  # Laissé vide pour que l'OCR le détecte automatiquement
-            "date": "",       # Laissé vide pour que l'OCR le détecte automatiquement
-            "supplier_name": "", # Laissé vide pour que l'OCR le détecte automatiquement
+            "reference": "",  # Laissé vide pour l'OCR
+            "date": "",       # Laissé vide pour l'OCR
+            "supplier_name": "", # Laissé vide pour l'OCR
         }
         
+        # Ajouter l'ID d'abonné si disponible
+        if self.has_subscriber_id:
+            invoice_data["subscriber_id"] = fields.get(AIRTABLE_SUBSCRIBER_ID_COLUMN, "")
+        else:
+            invoice_data["subscriber_id"] = ""
+            
+        # Ajouter prénom et nom si disponibles
+        if self.has_firstname:
+            invoice_data["first_name"] = fields.get(AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN, "")
+        else:
+            invoice_data["first_name"] = ""
+            
+        if self.has_lastname:
+            invoice_data["last_name"] = fields.get(AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN, "")
+        else:
+            invoice_data["last_name"] = ""
+        
         return invoice_data
-
-    def check_global_sync_status(self, record_id):
-        """
-        Vérifie si toutes les factures d'un enregistrement sont synchronisées
-        
-        Args:
-            record_id (str): ID de l'enregistrement Airtable
-        
-        Returns:
-            tuple: (bool: présence d'attachements, bool: tous synchronisés)
-        """
-        try:
-            # Récupérer l'enregistrement
-            record = self.table.get(record_id)
-            if not record:
-                logger.warning(f"Enregistrement {record_id} non trouvé lors de la vérification du statut")
-                return False, False
-                
-            fields = record.get('fields', {})
-            
-            has_attachments = False
-            all_synced = True
-            
-            # Vérifier chaque colonne de facture
-            for column in AIRTABLE_INVOICE_FILE_COLUMNS:
-                attachments = fields.get(column, [])
-                
-                if attachments:
-                    has_attachments = True
-                    sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
-                    is_synced = fields.get(sync_column, False) if sync_column else False
-                    
-                    if not is_synced:
-                        all_synced = False
-                        break
-            
-            return has_attachments, all_synced
-        
-        except Exception as e:
-            logger.error(f"Erreur lors de la vérification du statut global: {e}")
-            return False, False
-
-    def set_global_sync_status(self, record_id, status):
-        """
-        Définit explicitement le statut global de synchronisation
-        
-        Args:
-            record_id (str): ID de l'enregistrement Airtable
-            status (bool): Nouveau statut (True/False)
-            
-        Returns:
-            bool: True si la mise à jour a réussi, False sinon
-        """
-        try:
-            update_data = {
-                AIRTABLE_SYNCED_COLUMN: status
-            }
-            
-            result = self.table.update(record_id, update_data)
-            
-            if result:
-                status_text = "TRUE" if status else "FALSE"
-                logger.info(f"Statut global de synchronisation mis à jour à {status_text} pour l'enregistrement {record_id}")
-                return True
-            else:
-                logger.warning(f"Échec de la mise à jour du statut global pour l'enregistrement {record_id}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Erreur lors de la définition du statut global: {e}")
-            return False
-
-    def get_unprocessed_files_count(self, record_id):
-        """
-        Compte le nombre de fichiers non synchronisés dans un enregistrement
-        
-        Args:
-            record_id (str): ID de l'enregistrement Airtable
-            
-        Returns:
-            int: Nombre de fichiers non synchronisés (0 si aucun trouvé ou erreur)
-        """
-        try:
-            record = self.table.get(record_id)
-            if not record:
-                return 0
-                
-            fields = record.get('fields', {})
-            unprocessed_count = 0
-            
-            for column in AIRTABLE_INVOICE_FILE_COLUMNS:
-                attachments = fields.get(column, [])
-                if attachments:
-                    sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
-                    is_synced = fields.get(sync_column, False) if sync_column else False
-                    
-                    if not is_synced:
-                        unprocessed_count += 1
-            
-            return unprocessed_count
-            
-        except Exception as e:
-            logger.error(f"Erreur lors du comptage des fichiers non traités: {e}")
-            return 0
-
-    def get_all_file_statuses(self, record_id):
-        """
-        Récupère les statuts de synchronisation pour tous les fichiers d'un enregistrement
-        
-        Args:
-            record_id (str): ID de l'enregistrement Airtable
-            
-        Returns:
-            dict: {column_name: {'has_file': bool, 'is_synced': bool}}
-        """
-        try:
-            record = self.table.get(record_id)
-            if not record:
-                return {}
-                
-            fields = record.get('fields', {})
-            statuses = {}
-            
-            for column in AIRTABLE_INVOICE_FILE_COLUMNS:
-                attachments = fields.get(column, [])
-                has_file = bool(attachments)
-                
-                sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
-                is_synced = fields.get(sync_column, False) if sync_column and has_file else False
-                
-                statuses[column] = {
-                    'has_file': has_file,
-                    'is_synced': is_synced,
-                    'file_name': attachments[0].get('filename') if has_file else None
-                }
-            
-            return statuses
-            
-        except Exception as e:
-            logger.error(f"Erreur lors de la récupération des statuts de fichiers: {e}")
-            return {}
