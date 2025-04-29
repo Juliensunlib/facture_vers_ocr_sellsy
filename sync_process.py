@@ -25,7 +25,7 @@ def sync_invoices_to_sellsy():
     airtable = AirtableAPI()
     sellsy = SellsyAPIV2()
     
-    # Récupérer les factures non synchronisées
+    # Récupérer les factures non synchronisées créées aujourd'hui
     unsync_invoices = airtable.get_unsynchronized_invoices(limit=BATCH_SIZE)
     
     if not unsync_invoices:
@@ -42,7 +42,7 @@ def sync_invoices_to_sellsy():
     for record in unsync_invoices:
         record_id = record.get('id')
         try:
-            # Extraire les données de la facture
+            # Extraire les données minimales de la facture
             invoice_data = airtable.get_invoice_data(record)
             
             if not invoice_data:
@@ -50,8 +50,8 @@ def sync_invoices_to_sellsy():
                 error_count += 1
                 continue
                 
-            # Télécharger le fichier PDF
-            pdf_path = airtable.download_invoice_file(record)
+            # Télécharger le fichier PDF et récupérer la colonne source
+            pdf_path, file_column = airtable.download_invoice_file(record)
             
             if not pdf_path:
                 logger.warning(f"Impossible de télécharger le fichier PDF pour l'enregistrement {record_id}")
@@ -61,7 +61,7 @@ def sync_invoices_to_sellsy():
             # Mettre à jour le chemin du fichier dans les données
             invoice_data["file_path"] = pdf_path
             
-            # Envoyer à l'OCR Sellsy
+            # Envoyer à l'OCR Sellsy - sans métadonnées précises, l'OCR fera le travail d'extraction
             ocr_result = sellsy.send_invoice_to_ocr(invoice_data, pdf_path)
             
             if not ocr_result:
@@ -80,10 +80,10 @@ def sync_invoices_to_sellsy():
                 elif "docId" in ocr_result:
                     sellsy_id = ocr_result["docId"]
             
-            # Marquer comme synchronisé dans Airtable
-            airtable.mark_as_synchronized(record_id, sellsy_id)
+            # Marquer comme synchronisé dans Airtable avec la colonne source
+            airtable.mark_as_synchronized(record_id, sellsy_id, file_column)
             
-            logger.info(f"Facture {invoice_data.get('reference')} synchronisée avec succès (Sellsy ID: {sellsy_id})")
+            logger.info(f"Facture depuis la colonne {file_column} synchronisée avec succès (Sellsy ID: {sellsy_id})")
             success_count += 1
             
             # Pause courte pour éviter de saturer les API
