@@ -20,7 +20,8 @@ from config import (  # Changé config_fixed en config
     AIRTABLE_SELLSY_ID_COLUMNS,
     AIRTABLE_SUBSCRIBER_ID_COLUMN,
     AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN,
-    AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN
+    AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN,
+    TRUST_COLUMN_MAPPING  # Nouvelle option ajoutée dans config.py
 )
 
 # Configuration du logging
@@ -42,11 +43,23 @@ class AirtableAPI:
     def _check_table_structure(self):
         """
         Vérifie la structure de la table Airtable pour déterminer quels champs existent réellement
+        Version corrigée qui fait confiance au mapping si l'option est activée
         """
+        # CORRECTION: Faire confiance au mapping défini si l'option est activée
+        if TRUST_COLUMN_MAPPING:
+            logger.info("Utilisation du mapping de colonnes défini dans config.py sans vérification")
+            self.has_subscriber_id = AIRTABLE_SUBSCRIBER_ID_COLUMN != ""
+            self.has_firstname = AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN != ""
+            self.has_lastname = AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN != ""
+            self.has_global_sync = AIRTABLE_SYNCED_COLUMN != ""
+            self.sync_status_columns = AIRTABLE_SYNC_STATUS_COLUMNS.copy()
+            self.sellsy_id_columns = AIRTABLE_SELLSY_ID_COLUMNS.copy()
+            return
+        
         try:
-            # Récupérer un enregistrement pour observer sa structure
-            record = self.table.first()
-            if not record:
+            # Récupérer plusieurs enregistrements pour une meilleure détection
+            records = self.table.all(max_records=10)  # Examiner jusqu'à 10 enregistrements
+            if not records:
                 logger.warning("Table vide ou inaccessible, impossible de vérifier sa structure")
                 # Initialiser avec des valeurs par défaut en cas d'échec
                 self.has_subscriber_id = False
@@ -56,31 +69,34 @@ class AirtableAPI:
                 self.sync_status_columns = {}
                 self.sellsy_id_columns = {}
                 return
-                
-            fields = record.get('fields', {})
-            field_names = set(fields.keys())
             
-            logger.info(f"Champs détectés dans Airtable: {', '.join(field_names)}")
+            # Combiner tous les champs trouvés dans tous les enregistrements
+            all_fields = set()
+            for record in records:
+                fields = record.get('fields', {})
+                all_fields.update(fields.keys())
+                
+            logger.info(f"Champs détectés dans Airtable: {', '.join(all_fields)}")
             
             # Vérifier les champs globaux
-            self.has_subscriber_id = AIRTABLE_SUBSCRIBER_ID_COLUMN in field_names
-            self.has_firstname = AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN in field_names
-            self.has_lastname = AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN in field_names
-            self.has_global_sync = AIRTABLE_SYNCED_COLUMN in field_names
+            self.has_subscriber_id = AIRTABLE_SUBSCRIBER_ID_COLUMN in all_fields
+            self.has_firstname = AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN in all_fields
+            self.has_lastname = AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN in all_fields
+            self.has_global_sync = AIRTABLE_SYNCED_COLUMN in all_fields
             
             # Vérifier les champs de status de synchronisation
             self.sync_status_columns = {}
             for file_col, status_col in AIRTABLE_SYNC_STATUS_COLUMNS.items():
-                if file_col in field_names and status_col in field_names:
+                if file_col in all_fields and status_col in all_fields:
                     self.sync_status_columns[file_col] = status_col
-                elif file_col in field_names:
+                elif file_col in all_fields:
                     logger.warning(f"Colonne de fichier {file_col} existe mais pas sa colonne de statut {status_col}")
                     # Continuer sans le statut, on considérera toujours non synchronisé
                     
             # Vérifier les champs d'ID Sellsy
             self.sellsy_id_columns = {}
             for file_col, id_col in AIRTABLE_SELLSY_ID_COLUMNS.items():
-                if id_col and file_col in field_names and id_col in field_names:
+                if id_col and file_col in all_fields and id_col in all_fields:
                     self.sellsy_id_columns[file_col] = id_col
                     
             # Journaliser les résultats
@@ -137,14 +153,20 @@ class AirtableAPI:
                         # Utiliser la colonne de statut correspondante si elle existe
                         sync_column = self.sync_status_columns.get(column)
                         if sync_column:
+                            # CORRECTION: Considérer explicitement que False ou champ manquant = non synchronisé
                             is_synced = fields.get(sync_column, False)
                             if not is_synced:
                                 has_unsync_file = True
                                 break
                         else:
-                            # CORRECTION: Ignorer les colonnes sans statut car on ne pourra pas les synchroniser
-                            logger.warning(f"Colonne de statut manquante pour {column} dans l'enregistrement {record.get('id', 'inconnu')}, ignorée")
-                            continue
+                            # CORRECTION: Avec TRUST_COLUMN_MAPPING, on considère que la colonne existe
+                            if TRUST_COLUMN_MAPPING and column in AIRTABLE_SYNC_STATUS_COLUMNS:
+                                logger.info(f"Colonne {column} considérée comme non synchronisée (confiance au mapping)")
+                                has_unsync_file = True
+                                break
+                            else:
+                                logger.warning(f"Colonne de statut manquante pour {column} dans l'enregistrement {record.get('id', 'inconnu')}, ignorée")
+                                continue
                 
                 if has_unsync_file:
                     validated_records.append(record)
@@ -183,13 +205,19 @@ class AirtableAPI:
             # Récupérer le nom exact de la colonne de statut correspondante
             sync_column = self.sync_status_columns.get(column)
             
+            # CORRECTION: Avec TRUST_COLUMN_MAPPING activé, on fait confiance au mapping défini
+            if not sync_column and TRUST_COLUMN_MAPPING:
+                sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
+                if sync_column:
+                    logger.debug(f"Utilisation du mapping défini pour la colonne de statut: {sync_column}")
+            
             if not sync_column:
                 # CORRECTION: Ne pas retourner les colonnes sans colonne de statut correspondante
                 # car mark_file_as_synchronized ne pourra pas les traiter
                 logger.warning(f"Colonne de statut manquante pour {column}, ignorée car non modifiable")
                 continue
             
-            # Vérifier explicitement si le statut est False
+            # Vérifier explicitement si le statut est False ou manquant/vide
             is_synced = fields.get(sync_column, False)
             
             # Logging détaillé pour le débogage
@@ -275,11 +303,14 @@ class AirtableAPI:
             # Identifier la colonne de statut correspondante
             sync_column = self.sync_status_columns.get(file_column)
             
+            # CORRECTION: Avec TRUST_COLUMN_MAPPING activé, on fait confiance au mapping défini
+            if not sync_column and TRUST_COLUMN_MAPPING:
+                sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(file_column)
+                if sync_column:
+                    logger.debug(f"Utilisation du mapping défini pour la colonne de statut: {sync_column}")
+            
             if not sync_column:
                 logger.error(f"Colonne de statut de synchronisation non trouvée pour {file_column}. Impossible de marquer comme synchronisé.")
-                # CORRECTION: Ici nous devrions potentiellement créer la colonne manquante si possible
-                # Pour l'instant, on renvoie juste un échec plus explicite
-                logger.error(f"Cette facture ne peut pas être marquée comme synchronisée sans ajout de colonne dans Airtable")
                 return False
             
             # Vérifier que l'enregistrement existe toujours
@@ -298,6 +329,11 @@ class AirtableAPI:
             
             # Si un ID Sellsy est fourni et qu'une colonne dédiée existe, l'ajouter
             sellsy_id_column = self.sellsy_id_columns.get(file_column)
+            
+            # CORRECTION: Avec TRUST_COLUMN_MAPPING activé, on fait confiance au mapping défini
+            if not sellsy_id_column and TRUST_COLUMN_MAPPING:
+                sellsy_id_column = AIRTABLE_SELLSY_ID_COLUMNS.get(file_column)
+                
             if sellsy_id and sellsy_id_column:
                 update_data[sellsy_id_column] = sellsy_id
                 logger.info(f"Stockage de l'ID Sellsy {sellsy_id} dans la colonne {sellsy_id_column}")
@@ -359,6 +395,10 @@ class AirtableAPI:
                 if attachments:
                     has_attachments = True
                     sync_column = self.sync_status_columns.get(column)
+                    
+                    # CORRECTION: Avec TRUST_COLUMN_MAPPING activé, on fait confiance au mapping défini
+                    if not sync_column and TRUST_COLUMN_MAPPING:
+                        sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
                     
                     if sync_column:
                         # Vérifier si le statut est explicitement True
