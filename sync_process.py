@@ -1,11 +1,11 @@
 """
-Script principal pour synchroniser les factures fournisseurs d'Airtable vers Sellsy
+Script principal pour synchroniser les factures fournisseurs d'Airtable vers Sellsy par email
 """
 import os
 import logging
 import time
 from airtable_api import AirtableAPI
-from sellsy_api import SellsyAPIV2
+from email_sender import EmailSender
 from config import BATCH_SIZE
 
 # Configuration du logging
@@ -17,15 +17,15 @@ logger = logging.getLogger("sync_process")
 
 def sync_invoices_to_sellsy():
     """
-    Synchronise les factures fournisseurs d'Airtable vers Sellsy
+    Synchronise les factures fournisseurs d'Airtable vers Sellsy via email OCR
     """
-    logger.info("Démarrage de la synchronisation Airtable -> Sellsy")
+    logger.info("Démarrage de la synchronisation Airtable -> Sellsy (via email OCR)")
     
     # Initialiser les clients API
     airtable = AirtableAPI()
-    sellsy = SellsyAPIV2()
+    email_client = EmailSender()
     
-    # Récupérer les enregistrements avec des factures non synchronisées créées aujourd'hui
+    # Récupérer les enregistrements avec des factures non synchronisées
     unsync_records = airtable.get_unsynchronized_invoices(limit=BATCH_SIZE)
     
     if not unsync_records:
@@ -66,40 +66,38 @@ def sync_invoices_to_sellsy():
                 error_count += 1
                 continue
                 
-            # Envoyer à l'OCR Sellsy - sans métadonnées précises, l'OCR fera le travail d'extraction
-            ocr_result = sellsy.send_invoice_to_ocr(invoice_data, pdf_path)
+            # Envoyer par email à l'OCR Sellsy
+            email_result = email_client.send_invoice_to_ocr(invoice_data, pdf_path)
             
-            if not ocr_result:
-                logger.error(f"Échec de l'envoi à l'OCR pour la facture dans {file_column}, enregistrement {record_id}")
+            if not email_result:
+                logger.error(f"Échec de l'envoi par email à l'OCR pour la facture dans {file_column}, enregistrement {record_id}")
                 error_count += 1
                 continue
                 
-            # Extraire l'ID Sellsy du résultat OCR
+            # Extraire l'ID de suivi du résultat (fictif dans notre cas)
             sellsy_id = None
-            if isinstance(ocr_result, dict):
-                # Essayer de récupérer l'ID selon différentes structures possibles
-                if "data" in ocr_result and "id" in ocr_result["data"]:
-                    sellsy_id = ocr_result["data"]["id"]
-                elif "id" in ocr_result:
-                    sellsy_id = ocr_result["id"]
-                elif "docId" in ocr_result:
-                    sellsy_id = ocr_result["docId"]
+            if isinstance(email_result, dict):
+                # Essayer de récupérer l'ID selon la structure définie dans email_sender.py
+                if "data" in email_result and "id" in email_result["data"]:
+                    sellsy_id = email_result["data"]["id"]
+                elif "id" in email_result:
+                    sellsy_id = email_result["id"]
             
             # Marquer cette facture spécifique comme synchronisée dans Airtable
             airtable.mark_file_as_synchronized(record_id, file_column, sellsy_id)
             
-            logger.info(f"Facture depuis la colonne {file_column} synchronisée avec succès (Sellsy ID: {sellsy_id})")
+            logger.info(f"Facture depuis la colonne {file_column} envoyée par email avec succès (ID de suivi: {sellsy_id})")
             success_count += 1
             
-            # Pause courte pour éviter de saturer les API
-            time.sleep(1)
+            # Pause courte pour éviter de saturer les APIs/serveurs email
+            time.sleep(2)
             
         except Exception as e:
             logger.error(f"Erreur lors du traitement de la facture dans {file_column}, enregistrement {record_id}: {e}")
             error_count += 1
     
     # Résumé de la synchronisation
-    logger.info(f"Synchronisation terminée: {success_count} factures synchronisées, {error_count} erreurs")
+    logger.info(f"Synchronisation terminée: {success_count} factures envoyées par email, {error_count} erreurs")
 
 if __name__ == "__main__":
     try:
