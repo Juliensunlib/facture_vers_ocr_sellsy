@@ -130,10 +130,10 @@ class SellsyAPIV2:
 
     def send_invoice_to_ocr(self, invoice_data, file_path):
         """
-        Envoie une facture fournisseur à l'OCR de Sellsy
+        Envoie une facture fournisseur à l'OCR de Sellsy sans métadonnées précises
         
         Args:
-            invoice_data (dict): Données de la facture
+            invoice_data (dict): Données minimales de la facture (peut être vide)
             file_path (str): Chemin vers le fichier PDF de la facture
             
         Returns:
@@ -144,12 +144,9 @@ class SellsyAPIV2:
             return None
             
         try:
-            # Préparer les données pour l'OCR
-            form_data = {
-                "reference": invoice_data.get("reference", ""),
-                "date": invoice_data.get("date", ""),
-                "supplierName": invoice_data.get("supplier_name", "")
-            }
+            # Préparer les données minimales pour l'OCR
+            # Laisser vide pour que l'OCR détecte automatiquement les informations
+            form_data = {}
             
             # Préparer le fichier
             with open(file_path, 'rb') as f:
@@ -158,7 +155,7 @@ class SellsyAPIV2:
                 }
                 
                 # Envoyer la facture à l'OCR
-                logger.info(f"Envoi de la facture {invoice_data.get('reference')} vers l'OCR Sellsy")
+                logger.info(f"Envoi de la facture vers l'OCR Sellsy (détection automatique)")
                 result = self._make_request("POST", "purchase/bills/parseFile", data=form_data, files=files)
                 
                 if result:
@@ -178,75 +175,3 @@ class SellsyAPIV2:
                     logger.debug(f"Fichier temporaire supprimé: {file_path}")
                 except Exception as e:
                     logger.warning(f"Impossible de supprimer le fichier temporaire {file_path}: {e}")
-
-    def search_supplier(self, name):
-        """
-        Recherche un fournisseur par son nom
-        
-        Args:
-            name (str): Nom du fournisseur
-            
-        Returns:
-            dict: Informations sur le fournisseur, ou None si non trouvé
-        """
-        if not name:
-            return None
-            
-        try:
-            # Paramètres de recherche
-            search_params = {
-                "search": name,
-                "limit": 1,
-                "order_by": "created_at",
-                "order": "DESC",
-                "types": ["supplier"]
-            }
-            
-            # Effectuer la recherche
-            results = self._make_request("GET", "individuals", search_params)
-            
-            if results and "data" in results and results["data"]:
-                logger.info(f"Fournisseur trouvé: {name}")
-                return results["data"][0]
-            else:
-                logger.warning(f"Fournisseur non trouvé: {name}")
-                return None
-        except Exception as e:
-            logger.error(f"Erreur lors de la recherche du fournisseur {name}: {e}")
-            return None
-
-    def create_supplier(self, name):
-        """
-        Crée un nouveau fournisseur
-        
-        Args:
-            name (str): Nom du fournisseur
-            
-        Returns:
-            dict: Informations sur le fournisseur créé, ou None en cas d'échec
-        """
-        if not name:
-            return None
-            
-        try:
-            # Données du fournisseur
-            supplier_data = {
-                "name": name,
-                "type": "supplier",
-                "corporation": {
-                    "name": name
-                }
-            }
-            
-            # Créer le fournisseur
-            result = self._make_request("POST", "individuals", supplier_data)
-            
-            if result and "data" in result:
-                logger.info(f"Fournisseur créé: {name}")
-                return result["data"]
-            else:
-                logger.error(f"Échec de la création du fournisseur {name}")
-                return None
-        except Exception as e:
-            logger.error(f"Erreur lors de la création du fournisseur {name}: {e}")
-            return None
