@@ -1,5 +1,6 @@
 """
 Configuration corrigée pour l'intégration Airtable-Sellsy
+avec gestion des colonnes manquantes
 """
 import os
 
@@ -22,11 +23,13 @@ AIRTABLE_SYNC_STATUS_COLUMNS = {
     "Facture 3 (from Documents Abonnés 3)": "Sync_Status_Facture_3"
 }
 
-# Colonnes pour stocker les IDs Sellsy pour chaque facture
+# IMPORTANT: Ces colonnes sont maintenant définies comme vides par défaut
+# puisqu'elles n'existent pas dans votre Airtable
+# Le code vérifiera leur existence avant de tenter de les utiliser
 AIRTABLE_SELLSY_ID_COLUMNS = {
-    "Facture 1 (from Documents Abonnés 3)": "ID_Sellsy_Facture_1",
-    "Facture 2 (from Documents Abonnés 3)": "ID_Sellsy_Facture_2",
-    "Facture 3 (from Documents Abonnés 3)": "ID_Sellsy_Facture_3"
+    "Facture 1 (from Documents Abonnés 3)": "",
+    "Facture 2 (from Documents Abonnés 3)": "",
+    "Facture 3 (from Documents Abonnés 3)": ""
 }
 
 # CORRECTION: Optional columns - Le code vérifiera si ces colonnes existent avant de les utiliser
