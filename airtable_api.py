@@ -159,6 +159,7 @@ class AirtableAPI:
     def get_next_unsynchronized_file(self, record):
         """
         Trouve la prochaine colonne de facture non synchronisée dans un enregistrement
+        Version améliorée avec vérification stricte des colonnes
         
         Args:
             record (dict): Enregistrement Airtable
@@ -167,24 +168,39 @@ class AirtableAPI:
             str: Nom de la colonne contenant une facture non synchronisée, ou None si tout est synchronisé
         """
         fields = record.get('fields', {})
+        record_id = record.get('id', 'inconnu')
         
+        logger.info(f"Recherche de factures non synchronisées pour l'enregistrement {record_id}")
+        
+        # Vérifier chaque colonne de facture dans l'ordre défini
         for column in AIRTABLE_INVOICE_FILE_COLUMNS:
             # Vérifier si la colonne existe et contient un fichier
             attachments = fields.get(column, [])
             if not attachments:
+                logger.debug(f"Colonne {column} : pas de fichier attaché")
                 continue
-                
-            # Vérifier si la colonne de statut existe
+            
+            # Récupérer le nom exact de la colonne de statut correspondante
             sync_column = self.sync_status_columns.get(column)
-            if sync_column:
-                # Vérifier si elle n'est pas synchronisée
-                is_synced = fields.get(sync_column, False)
-                if not is_synced:
-                    return column
-            else:
-                # Si pas de colonne de statut, considérer comme non synchronisée
+            
+            if not sync_column:
+                logger.warning(f"Colonne de statut manquante pour {column}, considérée comme non synchronisée")
+                logger.info(f"Fichier non synchronisé trouvé dans {column} (colonne de statut inexistante)")
                 return column
+            
+            # Vérifier explicitement si le statut est False
+            is_synced = fields.get(sync_column, False)
+            
+            # Logging détaillé pour le débogage
+            logger.debug(f"Colonne {column}, statut {sync_column} = {is_synced}")
+            
+            if not is_synced:
+                logger.info(f"Fichier non synchronisé trouvé dans {column} (statut: {is_synced})")
+                return column
+            else:
+                logger.debug(f"Colonne {column} : déjà synchronisée")
         
+        logger.info(f"Aucune facture non synchronisée trouvée pour l'enregistrement {record_id}")
         return None
 
     def download_invoice_file(self, record, file_column):
@@ -239,16 +255,22 @@ class AirtableAPI:
     def mark_file_as_synchronized(self, record_id, file_column, sellsy_id=None):
         """
         Marque une colonne de facture spécifique comme synchronisée avec Sellsy
+        Version améliorée avec vérifications supplémentaires
         
         Args:
             record_id (str): ID de l'enregistrement Airtable
-            file_column (str): Nom de la colonne contenant le fichier synchronisé
+            file_column (str): Nom exact de la colonne contenant le fichier synchronisé
             sellsy_id (str, optional): ID Sellsy de la facture créée
             
         Returns:
             bool: True si la mise à jour a réussi, False sinon
         """
         try:
+            # Vérifier que le fichier_column est bien dans notre mapping
+            if file_column not in AIRTABLE_INVOICE_FILE_COLUMNS:
+                logger.error(f"Colonne {file_column} non reconnue dans le mapping des colonnes de factures")
+                return False
+            
             # Identifier la colonne de statut correspondante
             sync_column = self.sync_status_columns.get(file_column)
             
@@ -256,12 +278,18 @@ class AirtableAPI:
                 logger.warning(f"Colonne de statut de synchronisation non trouvée pour {file_column}. Impossible de marquer comme synchronisé.")
                 return False
             
+            # Vérifier que l'enregistrement existe toujours
+            record = self.table.get(record_id)
+            if not record:
+                logger.error(f"L'enregistrement {record_id} n'existe pas ou n'est plus accessible")
+                return False
+                
             # Logging des valeurs avant mise à jour
             logger.info(f"Mise à jour pour le record {record_id}, colonne de statut {sync_column}")
-                
-            # Préparer les données à mettre à jour
+            
+            # Préparer les données à mettre à jour en utilisant une valeur booléenne explicite
             update_data = {
-                sync_column: True  # Utiliser True pour les cases à cocher Airtable
+                sync_column: True  # Valeur booléenne explicite pour Airtable
             }
             
             # Si un ID Sellsy est fourni et qu'une colonne dédiée existe, l'ajouter
@@ -275,13 +303,16 @@ class AirtableAPI:
             # Log de débogage
             logger.info(f"Données de mise à jour: {update_data}")
                 
-            # Effectuer la mise à jour
+            # Effectuer la mise à jour en utilisant la méthode correcte de l'API Airtable
             result = self.table.update(record_id, update_data)
             
-            # Log de débogage - Afficher le résultat de la mise à jour
-            logger.info(f"Résultat de la mise à jour: {result}")
-            
-            logger.info(f"Facture dans {file_column} marquée comme synchronisée pour l'enregistrement {record_id}")
+            # Vérifier que la mise à jour a bien été effectuée
+            if not result or not isinstance(result, dict):
+                logger.error(f"La mise à jour de l'enregistrement {record_id} a échoué ou n'a pas renvoyé de résultat valide")
+                return False
+                
+            # Log du résultat de la mise à jour
+            logger.info(f"Mise à jour réussie: {result.get('id') == record_id}")
             
             # Mettre à jour le statut global si nécessaire
             if self.has_global_sync:
