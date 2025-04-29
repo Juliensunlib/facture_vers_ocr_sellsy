@@ -1,5 +1,5 @@
 """
-Configuration pour l'intégration Airtable-Sellsy
+Configuration corrigée pour l'intégration Airtable-Sellsy
 """
 import os
 
@@ -29,18 +29,18 @@ AIRTABLE_SELLSY_ID_COLUMNS = {
     "Facture 3 (from Documents Abonnés 3)": "ID_Sellsy_Facture_3"
 }
 
-# Colonne existante pour l'ID de l'abonné
-AIRTABLE_SUBSCRIBER_ID_COLUMN = "ID_Sellsy"  # Contient le numéro d'abonné
+# CORRECTION: Optional columns - Le code vérifiera si ces colonnes existent avant de les utiliser
+# Colonne existante pour l'ID de l'abonné (facultatif)
+AIRTABLE_SUBSCRIBER_ID_COLUMN = "ID_Abonne"  # Peut être changé selon votre structure Airtable
 
-# Colonnes pour les informations de l'abonné
+# Colonnes pour les informations de l'abonné (facultatif)
 AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN = "Prenom"  # Prénom de l'abonné
 AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN = "Nom"  # Nom de l'abonné
 
-# Ajout de la variable manquante pour la compatibilité avec l'ancien code
-AIRTABLE_SELLSY_ID_COLUMN = "ID_Sellsy"  # Même que AIRTABLE_SUBSCRIBER_ID_COLUMN
-
+# CORRECTION: Ces variables sont définies comme optionnelles
+AIRTABLE_SELLSY_ID_COLUMN = "ID_Abonne"  # Changé de ID_Sellsy à ID_Abonne ou autre selon votre base
 AIRTABLE_CREATED_DATE_COLUMN = "Created_Time"  # Colonne contenant la date de création de l'enregistrement
-AIRTABLE_SYNCED_COLUMN = "Synchronisé_Sellsy"  # Colonne principale pour marquer comme synchronisé (ancienne, gardée pour compatibilité)
+AIRTABLE_SYNCED_COLUMN = "Sync_Status_Global"  # Renommé pour refléter un nom potentiellement différent
 
 # Configuration email pour l'OCR Sellsy
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")  # SMTP par défaut Gmail
