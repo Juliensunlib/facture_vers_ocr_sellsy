@@ -29,10 +29,10 @@ jobs:
           AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
           AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
           AIRTABLE_TABLE_NAME: ${{ secrets.AIRTABLE_TABLE_NAME }}
-          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
-          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
-          EMAIL_USER: ${{ secrets.EMAIL_USER }}
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-          EMAIL_OCR_TO: ${{ secrets.EMAIL_OCR_TO }}
+          EMAIL_HOST: "smtp.gmail.com"
+          EMAIL_PORT: "587"
+          EMAIL_USER: "marie@sunlib.fr"
+          EMAIL_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_FROM: "marie@sunlib.fr"
+          EMAIL_OCR_TO: "ocr.200978@sellsy.net"
         run: python sync_process.py
