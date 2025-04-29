@@ -1,12 +1,13 @@
 """
-Script principal pour synchroniser les factures fournisseurs d'Airtable vers Sellsy par email
+Script principal simplifié pour synchroniser les factures fournisseurs d'Airtable vers Sellsy par email
+Version optimisée qui se concentre uniquement sur les factures individuelles
 """
 import os
 import logging
 import time
 from airtable_api import AirtableAPI
 from email_sender import EmailSender
-from config import BATCH_SIZE, AIRTABLE_INVOICE_FILE_COLUMNS, AIRTABLE_SYNC_STATUS_COLUMNS, AIRTABLE_SYNCED_COLUMN
+from config import BATCH_SIZE, AIRTABLE_INVOICE_FILE_COLUMNS, AIRTABLE_SYNC_STATUS_COLUMNS
 
 # Configuration du logging
 logging.basicConfig(
@@ -17,48 +18,36 @@ logger = logging.getLogger("sync_process")
 
 def sync_invoices_to_sellsy():
     """
-    Synchronise les factures fournisseurs d'Airtable vers Sellsy via email OCR
-    Logique améliorée :
-    1. Vérification du statut global de synchronisation
-    2. Traitement des factures non synchronisées uniquement
-    3. Mise à jour du statut global lorsque toutes les factures sont synchronisées
+    Version simplifiée qui ignore le statut global et se concentre uniquement sur les factures individuelles
+    Traite toutes les factures non synchronisées indépendamment
     """
-    logger.info("Démarrage de la synchronisation Airtable -> Sellsy (via email OCR)")
+    logger.info("Démarrage de la synchronisation Airtable -> Sellsy (via email OCR) - Version simplifiée")
     
     # Initialiser les clients API
     airtable = AirtableAPI()
     email_client = EmailSender()
     
-    # Récupérer les enregistrements avec des factures non synchronisées
-    unsync_records = airtable.get_unsynchronized_invoices(limit=BATCH_SIZE)
+    # Récupérer tous les enregistrements qui ont au moins une facture
+    # La méthode existante get_unsynchronized_invoices() reste compatible
+    all_records = airtable.get_unsynchronized_invoices(limit=BATCH_SIZE)
     
-    if not unsync_records:
+    if not all_records:
         logger.info("Aucune facture à synchroniser")
         return
         
-    logger.info(f"Traitement de {len(unsync_records)} enregistrements")
+    logger.info(f"Traitement de {len(all_records)} enregistrements potentiels")
     
     # Compteurs pour le suivi
     success_count = 0
     error_count = 0
+    skipped_count = 0
     
     # Traiter chaque enregistrement
-    for record in unsync_records:
+    for record in all_records:
         record_id = record.get('id')
         fields = record.get('fields', {})
         
         logger.info(f"Traitement de l'enregistrement {record_id}")
-        
-        # Vérifier d'abord si l'enregistrement est déjà complètement synchronisé
-        is_fully_synced = fields.get(AIRTABLE_SYNCED_COLUMN, False)
-        if is_fully_synced:
-            logger.info(f"L'enregistrement {record_id} est déjà entièrement synchronisé, passage au suivant")
-            continue
-        
-        # Variables pour suivre l'état de synchronisation
-        all_files_synced = True
-        has_attachments = False
-        processed_this_run = False
         
         # Traiter toutes les colonnes de facture pour cet enregistrement
         for file_column in AIRTABLE_INVOICE_FILE_COLUMNS:
@@ -69,19 +58,16 @@ def sync_invoices_to_sellsy():
                 logger.debug(f"Pas de pièce jointe dans la colonne {file_column}")
                 continue
                 
-            has_attachments = True
-            
             # Vérifier si la facture est déjà synchronisée
             sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(file_column)
             is_synced = fields.get(sync_column, False) if sync_column else False
             
             if is_synced:
-                logger.debug(f"Facture dans {file_column} déjà synchronisée")
+                logger.debug(f"Facture dans {file_column} déjà synchronisée, ignorée")
+                skipped_count += 1
                 continue
                 
-            # Si on arrive ici, c'est qu'on a une facture non synchronisée
-            all_files_synced = False
-            
+            # Si on arrive ici, c'est qu'on a une facture à traiter
             logger.info(f"Traitement de la facture non synchronisée dans la colonne {file_column}")
                 
             try:
@@ -120,9 +106,9 @@ def sync_invoices_to_sellsy():
                         sellsy_id = email_result["id"]
                 
                 # Marquer cette facture spécifique comme synchronisée dans Airtable
+                # Utiliser la méthode simplifiée qui met à jour uniquement le statut de la facture
                 if airtable.mark_file_as_synchronized(record_id, file_column, sellsy_id):
-                    logger.info(f"Statut de synchronisation mis à jour avec succès pour {file_column}")
-                    processed_this_run = True
+                    logger.info(f"Facture dans {file_column} marquée comme synchronisée avec succès")
                     success_count += 1
                 else:
                     logger.warning(f"Échec de la mise à jour du statut de synchronisation pour {file_column}")
@@ -134,40 +120,9 @@ def sync_invoices_to_sellsy():
             except Exception as e:
                 logger.error(f"Erreur lors du traitement de la facture dans {file_column}, enregistrement {record_id}: {e}")
                 error_count += 1
-                all_files_synced = False
-        
-        # Si on a traité au moins une facture dans cette exécution, 
-        # vérifier si toutes les factures sont maintenant synchronisées
-        if processed_this_run and has_attachments:
-            # Récupérer l'enregistrement à jour pour vérifier le statut actuel
-            updated_record = airtable.table.get(record_id)
-            if updated_record:
-                updated_fields = updated_record.get('fields', {})
-                
-                # Revérifier toutes les colonnes
-                all_synced_now = True
-                for column in AIRTABLE_INVOICE_FILE_COLUMNS:
-                    attachments = updated_fields.get(column, [])
-                    if attachments:
-                        sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
-                        is_synced = updated_fields.get(sync_column, False) if sync_column else False
-                        if not is_synced:
-                            all_synced_now = False
-                            break
-                
-                # Si toutes les factures sont synchronisées, mettre à jour le statut global
-                if all_synced_now:
-                    logger.info(f"Toutes les factures sont maintenant synchronisées pour l'enregistrement {record_id}")
-                    current_global_status = updated_fields.get(AIRTABLE_SYNCED_COLUMN, False)
-                    
-                    if not current_global_status:
-                        if airtable.table.update(record_id, {AIRTABLE_SYNCED_COLUMN: True}):
-                            logger.info(f"Statut global de synchronisation mis à jour à TRUE pour {record_id}")
-                        else:
-                            logger.warning(f"Échec de la mise à jour du statut global pour {record_id}")
     
     # Résumé de la synchronisation
-    logger.info(f"Synchronisation terminée: {success_count} factures envoyées par email, {error_count} erreurs")
+    logger.info(f"Synchronisation terminée: {success_count} factures envoyées, {skipped_count} factures déjà synchronisées, {error_count} erreurs")
 
 if __name__ == "__main__":
     try:
