@@ -27,6 +27,7 @@ def sync_invoices_to_sellsy():
     email_client = EmailSender()
     
     # Récupérer les enregistrements avec des factures non synchronisées
+    # Augmentation de la limite pour traiter plus de factures
     unsync_records = airtable.get_unsynchronized_invoices(limit=BATCH_SIZE)
     
     if not unsync_records:
@@ -44,6 +45,8 @@ def sync_invoices_to_sellsy():
         record_id = record.get('id')
         fields = record.get('fields', {})
         
+        logger.info(f"Traitement de l'enregistrement {record_id}")
+        
         # Traiter toutes les colonnes de facture pour cet enregistrement
         for file_column in AIRTABLE_INVOICE_FILE_COLUMNS:
             # Vérifier si cette colonne contient un fichier non synchronisé
@@ -53,9 +56,15 @@ def sync_invoices_to_sellsy():
             # Vérifier si la colonne a un fichier et n'est pas déjà synchronisée
             is_synced = fields.get(sync_column, False) if sync_column else True
             
-            if not attachments or is_synced:
-                # Passer à la colonne suivante s'il n'y a pas de fichier ou si déjà synchronisé
+            if not attachments:
+                logger.debug(f"Pas de pièce jointe dans la colonne {file_column}")
                 continue
+            
+            if is_synced:
+                logger.debug(f"Facture dans {file_column} déjà synchronisée")
+                continue
+                
+            logger.info(f"Traitement de la facture non synchronisée dans la colonne {file_column}")
                 
             try:
                 # Extraire les données minimales de la facture
@@ -67,7 +76,7 @@ def sync_invoices_to_sellsy():
                     continue
                     
                 # Télécharger le fichier PDF
-                pdf_path = airtable.download_invoice_file(record, file_column)
+                pdf_path, original_filename = airtable.download_invoice_file(record, file_column)
                 
                 if not pdf_path:
                     logger.warning(f"Impossible de télécharger le fichier PDF depuis {file_column} pour l'enregistrement {record_id}")
@@ -76,7 +85,7 @@ def sync_invoices_to_sellsy():
                     
                 # Envoyer par email à l'OCR Sellsy
                 logger.info(f"Envoi du PDF {pdf_path} par email vers l'OCR Sellsy")
-                email_result = email_client.send_invoice_to_ocr(invoice_data, pdf_path)
+                email_result = email_client.send_invoice_to_ocr(invoice_data, pdf_path, original_filename)
                 
                 if not email_result:
                     logger.error(f"Échec de l'envoi par email à l'OCR pour la facture dans {file_column}, enregistrement {record_id}")
