@@ -22,25 +22,16 @@ AIRTABLE_SYNC_STATUS_COLUMNS = {
     "Facture 3 (from Documents Abonnés 3)": "Sync_Status_Facture_3"
 }
 
-# Colonnes pour stocker les IDs Sellsy pour chaque facture
-AIRTABLE_SELLSY_ID_COLUMNS = {
-    "Facture 1 (from Documents Abonnés 3)": "ID_Sellsy_Facture_1",
-    "Facture 2 (from Documents Abonnés 3)": "ID_Sellsy_Facture_2",
-    "Facture 3 (from Documents Abonnés 3)": "ID_Sellsy_Facture_3"
-}
-
-# Colonne existante pour l'ID de l'abonné
+# ID de l'abonné (maintenu pour compatibilité)
 AIRTABLE_SUBSCRIBER_ID_COLUMN = "ID_Sellsy"  # Contient le numéro d'abonné
+AIRTABLE_SELLSY_ID_COLUMN = "ID_Sellsy"      # Même colonne, maintenu pour compatibilité
 
 # Colonnes pour les informations de l'abonné
 AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN = "Prenom"  # Prénom de l'abonné
-AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN = "Nom"  # Nom de l'abonné
+AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN = "Nom"      # Nom de l'abonné
 
-# Ajout de la variable manquante pour la compatibilité avec l'ancien code
-AIRTABLE_SELLSY_ID_COLUMN = "ID_Sellsy"  # Même que AIRTABLE_SUBSCRIBER_ID_COLUMN
-
-AIRTABLE_CREATED_DATE_COLUMN = "Created_Time"  # Colonne contenant la date de création de l'enregistrement
-AIRTABLE_SYNCED_COLUMN = "Synchronisé_Sellsy"  # Colonne principale pour marquer comme synchronisé (ancienne, gardée pour compatibilité)
+AIRTABLE_CREATED_DATE_COLUMN = "Created_Time"    # Colonne contenant la date de création de l'enregistrement
+AIRTABLE_SYNCED_COLUMN = "Synchronisé_Sellsy"    # Colonne principale pour marquer comme synchronisé
 
 # Configuration email pour l'OCR Sellsy
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")  # SMTP par défaut Gmail
@@ -57,4 +48,4 @@ SELLSY_WEBHOOK_TOKEN = os.environ.get("SELLSY_WEBHOOK_TOKEN", "")
 
 # Paramètres de synchronisation
 SYNC_INTERVAL_MINUTES = 60  # Intervalle de synchronisation pour GitHub Actions
-BATCH_SIZE = 100  # Nombre de factures à traiter par lot - AUGMENTÉ pour traiter plus de factures
+BATCH_SIZE = 100  # Nombre de factures à traiter par lot
