@@ -154,9 +154,11 @@ class SellsyAPIV2:
                     'file': (os.path.basename(file_path), f, 'application/pdf')
                 }
                 
-                # Envoyer la facture à l'OCR
+                # CORRECTION: Utiliser le bon endpoint pour l'OCR des factures fournisseurs
+                # Ancienne URL: "purchase/bills/parseFile"
+                # Nouvelle URL: "purchases/scan"
                 logger.info(f"Envoi de la facture vers l'OCR Sellsy (détection automatique)")
-                result = self._make_request("POST", "purchase/bills/parseFile", data=form_data, files=files)
+                result = self._make_request("POST", "purchases/scan", data=form_data, files=files)
                 
                 if result:
                     logger.info(f"Facture envoyée avec succès à l'OCR: {json.dumps(result)[:200]}...")
