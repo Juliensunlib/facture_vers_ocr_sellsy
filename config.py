@@ -53,4 +53,4 @@ SELLSY_WEBHOOK_TOKEN = os.environ.get("SELLSY_WEBHOOK_TOKEN", "")
 
 # Paramètres de synchronisation
 SYNC_INTERVAL_MINUTES = 60  # Intervalle de synchronisation pour GitHub Actions
-BATCH_SIZE = 10  # Nombre de factures à traiter par lot
+BATCH_SIZE = 50  # Nombre de factures à traiter par lot - AUGMENTÉ pour traiter plus de factures
