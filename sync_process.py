@@ -53,12 +53,16 @@ def sync_invoices_to_sellsy():
             attachments = fields.get(file_column, [])
             sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(file_column)
             
-            # Vérifier si la colonne a un fichier et n'est pas déjà synchronisée
-            is_synced = fields.get(sync_column, False) if sync_column else True
+            # Debug: Afficher les valeurs pour cette colonne
+            logger.debug(f"Colonne {file_column}: attachments={bool(attachments)}, sync_column={sync_column}, is_synced={fields.get(sync_column, False)}")
             
+            # Vérifier si la colonne a un fichier
             if not attachments:
                 logger.debug(f"Pas de pièce jointe dans la colonne {file_column}")
                 continue
+            
+            # Vérifier explicitement si la colonne n'est pas déjà synchronisée
+            is_synced = fields.get(sync_column, False) if sync_column else True
             
             if is_synced:
                 logger.debug(f"Facture dans {file_column} déjà synchronisée")
