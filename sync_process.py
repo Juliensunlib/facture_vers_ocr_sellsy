@@ -7,9 +7,9 @@ import os
 import logging
 import time
 import sys
-from airtable_api_fixed import AirtableAPI
+from airtable_api import AirtableAPI  # Corrected import
 from email_sender import EmailSender
-from config_fixed import BATCH_SIZE, AIRTABLE_INVOICE_FILE_COLUMNS
+from config import BATCH_SIZE, AIRTABLE_INVOICE_FILE_COLUMNS  # Corrected import
 
 # Configuration améliorée du logging
 logging.basicConfig(
