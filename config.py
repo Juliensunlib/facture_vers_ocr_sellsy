@@ -14,9 +14,26 @@ AIRTABLE_INVOICE_FILE_COLUMNS = [
     "Facture 2 (from Documents Abonnés 3)",
     "Facture 3 (from Documents Abonnés 3)"
 ]
+
+# Colonnes de statut de synchronisation pour chaque facture
+AIRTABLE_SYNC_STATUS_COLUMNS = {
+    "Facture 1 (from Documents Abonnés 3)": "Sync_Status_Facture_1",
+    "Facture 2 (from Documents Abonnés 3)": "Sync_Status_Facture_2",
+    "Facture 3 (from Documents Abonnés 3)": "Sync_Status_Facture_3"
+}
+
+# Colonnes pour stocker les IDs Sellsy pour chaque facture
+AIRTABLE_SELLSY_ID_COLUMNS = {
+    "Facture 1 (from Documents Abonnés 3)": "ID_Sellsy_Facture_1",
+    "Facture 2 (from Documents Abonnés 3)": "ID_Sellsy_Facture_2",
+    "Facture 3 (from Documents Abonnés 3)": "ID_Sellsy_Facture_3"
+}
+
+# Colonne existante pour l'ID de l'abonné
+AIRTABLE_SUBSCRIBER_ID_COLUMN = "ID_Sellsy"  # Contient le numéro d'abonné
+
 AIRTABLE_CREATED_DATE_COLUMN = "Created_Time"  # Colonne contenant la date de création de l'enregistrement
-AIRTABLE_SYNCED_COLUMN = "Synchronisé_Sellsy"  # Colonne pour marquer comme synchronisé
-AIRTABLE_SELLSY_ID_COLUMN = "ID_Sellsy"  # Colonne pour stocker l'ID Sellsy
+AIRTABLE_SYNCED_COLUMN = "Synchronisé_Sellsy"  # Colonne principale pour marquer comme synchronisé (ancienne, gardée pour compatibilité)
 
 # Configuration Sellsy API V2
 SELLSY_CLIENT_ID = os.environ.get("SELLSY_CLIENT_ID")
