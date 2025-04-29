@@ -32,6 +32,9 @@ AIRTABLE_SELLSY_ID_COLUMNS = {
 # Colonne existante pour l'ID de l'abonné
 AIRTABLE_SUBSCRIBER_ID_COLUMN = "ID_Sellsy"  # Contient le numéro d'abonné
 
+# Ajout de la variable manquante pour la compatibilité avec l'ancien code
+AIRTABLE_SELLSY_ID_COLUMN = "ID_Sellsy"  # Même que AIRTABLE_SUBSCRIBER_ID_COLUMN
+
 AIRTABLE_CREATED_DATE_COLUMN = "Created_Time"  # Colonne contenant la date de création de l'enregistrement
 AIRTABLE_SYNCED_COLUMN = "Synchronisé_Sellsy"  # Colonne principale pour marquer comme synchronisé (ancienne, gardée pour compatibilité)
 
