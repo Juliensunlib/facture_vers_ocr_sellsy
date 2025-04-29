@@ -188,7 +188,6 @@ class AirtableAPI:
         try:
             # Identifier les colonnes de statut et d'ID correspondantes
             sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(file_column)
-            id_column = AIRTABLE_SELLSY_ID_COLUMNS.get(file_column)
             
             if not sync_column:
                 logger.error(f"Colonne de statut de synchronisation non trouvée pour {file_column}")
@@ -197,16 +196,10 @@ class AirtableAPI:
             # Debugging: Afficher les valeurs avant mise à jour
             logger.info(f"Mise à jour pour le record {record_id}, colonne de statut {sync_column}")
                 
-            # Préparation des données de mise à jour
+            # Préparation des données de mise à jour - SIMPLIFIÉE
             update_data = {
-                sync_column: 1,  # Utiliser 1 au lieu de True pour les cases à cocher Airtable
-                "Colonne_Synchronisée": file_column,
-                "Dernière_Synchronisation": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                sync_column: 1  # Utiliser 1 au lieu de True pour les cases à cocher Airtable
             }
-            
-            # Ajouter l'ID Sellsy si fourni et si la colonne ID existe
-            if sellsy_id and id_column:
-                update_data[id_column] = str(sellsy_id)
             
             # Log de débogage
             logger.info(f"Données de mise à jour: {update_data}")
@@ -257,8 +250,7 @@ class AirtableAPI:
             # Mettre à jour le statut global uniquement si tout est synchronisé
             if all_synced:
                 self.table.update(record_id, {
-                    AIRTABLE_SYNCED_COLUMN: 1,  # Utiliser 1 au lieu de True pour les cases à cocher Airtable
-                    "Dernière_Synchronisation_Complete": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    AIRTABLE_SYNCED_COLUMN: 1  # Utiliser 1 au lieu de True pour les cases à cocher Airtable
                 })
                 logger.info(f"Toutes les factures sont synchronisées pour l'enregistrement {record_id}")
         except Exception as e:
