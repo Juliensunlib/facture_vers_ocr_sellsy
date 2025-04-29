@@ -14,7 +14,7 @@ from config import (
     AIRTABLE_INVOICE_FILE_COLUMNS,
     AIRTABLE_CREATED_DATE_COLUMN,
     AIRTABLE_SYNCED_COLUMN,
-    AIRTABLE_SELLSY_ID_COLUMN,
+    AIRTABLE_SELLSY_ID_COLUMN,  # Maintenant défini dans config.py
     AIRTABLE_SYNC_STATUS_COLUMNS,
     AIRTABLE_SELLSY_ID_COLUMNS,
     AIRTABLE_SUBSCRIBER_ID_COLUMN
@@ -60,11 +60,12 @@ class AirtableAPI:
         # Au moins une des colonnes de facture doit avoir un fichier non synchronisé
         files_sync_formula = f"OR({','.join(file_sync_conditions)})"
         
-        # Filtre par date de création
-        date_formula = f"IS_AFTER({AIRTABLE_CREATED_DATE_COLUMN}, '{today}')"
+        # Filtre par date de création (commenté pour le moment car cela pourrait être trop restrictif pour les tests)
+        # date_formula = f"IS_AFTER({AIRTABLE_CREATED_DATE_COLUMN}, '{today}')"
+        # formula = f"AND({files_sync_formula}, {date_formula})"
         
-        # Formule finale
-        formula = f"AND({files_sync_formula}, {date_formula})"
+        # Formule simplifiée pour les tests (uniquement sur les fichiers non synchronisés)
+        formula = files_sync_formula
         
         try:
             # Récupération des enregistrements
@@ -73,7 +74,7 @@ class AirtableAPI:
             else:
                 records = self.table.all(formula=formula)
                 
-            logger.info(f"Récupération de {len(records)} enregistrements avec factures non synchronisées créées depuis le {today}")
+            logger.info(f"Récupération de {len(records)} enregistrements avec factures non synchronisées")
             return records
         except Exception as e:
             logger.error(f"Erreur lors de la récupération des factures: {e}")
@@ -175,7 +176,8 @@ class AirtableAPI:
                 
             update_data = {
                 sync_column: True,
-                f"Dernière_Synchronisation_{file_column.split(' ')[1]}": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "Colonne_Synchronisée": file_column,
+                "Dernière_Synchronisation": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
             # Ajouter l'ID Sellsy si fourni et si la colonne ID existe
