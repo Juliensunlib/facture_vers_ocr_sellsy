@@ -142,9 +142,9 @@ class AirtableAPI:
                                 has_unsync_file = True
                                 break
                         else:
-                            # Si la colonne de statut n'existe pas, considérer comme non synchronisé
-                            has_unsync_file = True
-                            break
+                            # CORRECTION: Ignorer les colonnes sans statut car on ne pourra pas les synchroniser
+                            logger.warning(f"Colonne de statut manquante pour {column} dans l'enregistrement {record.get('id', 'inconnu')}, ignorée")
+                            continue
                 
                 if has_unsync_file:
                     validated_records.append(record)
@@ -184,9 +184,10 @@ class AirtableAPI:
             sync_column = self.sync_status_columns.get(column)
             
             if not sync_column:
-                logger.warning(f"Colonne de statut manquante pour {column}, considérée comme non synchronisée")
-                logger.info(f"Fichier non synchronisé trouvé dans {column} (colonne de statut inexistante)")
-                return column
+                # CORRECTION: Ne pas retourner les colonnes sans colonne de statut correspondante
+                # car mark_file_as_synchronized ne pourra pas les traiter
+                logger.warning(f"Colonne de statut manquante pour {column}, ignorée car non modifiable")
+                continue
             
             # Vérifier explicitement si le statut est False
             is_synced = fields.get(sync_column, False)
@@ -275,7 +276,10 @@ class AirtableAPI:
             sync_column = self.sync_status_columns.get(file_column)
             
             if not sync_column:
-                logger.warning(f"Colonne de statut de synchronisation non trouvée pour {file_column}. Impossible de marquer comme synchronisé.")
+                logger.error(f"Colonne de statut de synchronisation non trouvée pour {file_column}. Impossible de marquer comme synchronisé.")
+                # CORRECTION: Ici nous devrions potentiellement créer la colonne manquante si possible
+                # Pour l'instant, on renvoie juste un échec plus explicite
+                logger.error(f"Cette facture ne peut pas être marquée comme synchronisée sans ajout de colonne dans Airtable")
                 return False
             
             # Vérifier que l'enregistrement existe toujours
