@@ -47,35 +47,55 @@ class AirtableAPI:
         # Obtenir la date du jour au format YYYY-MM-DD
         today = datetime.now().strftime("%Y-%m-%d")
         
-        # Construire les formules pour chaque colonne de facture
-        # Vérifie pour chaque colonne si un fichier existe ET si son statut de synchronisation est vide ou False
-        file_sync_conditions = []
+        # Approche simplifiée pour la formule
+        # Au lieu d'utiliser IS_ATTACHMENT qui peut causer des problèmes
+        # Nous allons filtrer en fonction des statuts de synchronisation 
+        # et vérifier la présence de pièces jointes après le filtrage
+        formula_conditions = []
         
-        for column in AIRTABLE_INVOICE_FILE_COLUMNS:
-            sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
-            if sync_column:
-                condition = f"AND(IS_ATTACHMENT({column}), OR({sync_column}=BLANK(), {sync_column}=FALSE()))"
-                file_sync_conditions.append(condition)
+        for column, sync_column in AIRTABLE_SYNC_STATUS_COLUMNS.items():
+            # Vérifier seulement si le statut est BLANK() ou FALSE()
+            formula_conditions.append(f"OR({sync_column}=BLANK(), {sync_column}=FALSE())")
         
-        # Au moins une des colonnes de facture doit avoir un fichier non synchronisé
-        files_sync_formula = f"OR({','.join(file_sync_conditions)})"
-        
-        # Filtre par date de création (commenté pour le moment car cela pourrait être trop restrictif pour les tests)
-        # date_formula = f"IS_AFTER({AIRTABLE_CREATED_DATE_COLUMN}, '{today}')"
-        # formula = f"AND({files_sync_formula}, {date_formula})"
-        
-        # Formule simplifiée pour les tests (uniquement sur les fichiers non synchronisés)
-        formula = files_sync_formula
-        
+        # Combine all conditions with OR
+        if formula_conditions:
+            formula = f"OR({','.join(formula_conditions)})"
+        else:
+            formula = ""
+            
         try:
             # Récupération des enregistrements
-            if limit:
-                records = self.table.all(formula=formula, max_records=limit)
+            if formula:
+                if limit:
+                    records = self.table.all(formula=formula, max_records=limit)
+                else:
+                    records = self.table.all(formula=formula)
             else:
-                records = self.table.all(formula=formula)
+                if limit:
+                    records = self.table.all(max_records=limit)
+                else:
+                    records = self.table.all()
                 
-            logger.info(f"Récupération de {len(records)} enregistrements avec factures non synchronisées")
-            return records
+            # Filtrer manuellement les enregistrements qui ont réellement des pièces jointes
+            filtered_records = []
+            for record in records:
+                fields = record.get('fields', {})
+                for column in AIRTABLE_INVOICE_FILE_COLUMNS:
+                    # Vérifier si la colonne a un fichier attaché
+                    attachments = fields.get(column, [])
+                    if attachments:
+                        # Vérifier le statut de synchronisation
+                        sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
+                        is_synced = fields.get(sync_column, False) if sync_column else True
+                        
+                        # Si au moins une colonne a un fichier et n'est pas synchronisée, ajouter l'enregistrement
+                        if not is_synced:
+                            filtered_records.append(record)
+                            break
+            
+            logger.info(f"Récupération de {len(filtered_records)} enregistrements avec factures non synchronisées")
+            return filtered_records
+            
         except Exception as e:
             logger.error(f"Erreur lors de la récupération des factures: {e}")
             return []
