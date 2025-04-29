@@ -47,12 +47,11 @@ class AirtableAPI:
             list: Liste des enregistrements Airtable
         """
         try:
-            # Approche simplifiée: récupérer tous les enregistrements et filtrer en mémoire
-            # Cela évite les problèmes de formules complexes avec l'API Airtable
             logger.info("Récupération des enregistrements Airtable...")
             
-            # Récupérer uniquement les enregistrements non synchronisés (champ global)
-            formula = f"{{{AIRTABLE_SYNCED_COLUMN}}}=FALSE()"
+            # Modifier la formule pour inclure à la fois FALSE et NULL (vide)
+            # Inclut les enregistrements où le champ de synchronisation est FALSE OU vide
+            formula = f"OR({{{AIRTABLE_SYNCED_COLUMN}}}=FALSE(), {{{AIRTABLE_SYNCED_COLUMN}}}='')"
             
             if limit:
                 records = self.table.all(formula=formula, max_records=limit)
