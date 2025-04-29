@@ -196,9 +196,9 @@ class AirtableAPI:
             # Debugging: Afficher les valeurs avant mise à jour
             logger.info(f"Mise à jour pour le record {record_id}, colonne de statut {sync_column}")
                 
-            # Préparation des données de mise à jour - SIMPLIFIÉE
+            # CORRECTION: Utiliser True au lieu de 1 pour les cases à cocher
             update_data = {
-                sync_column: 1  # Utiliser 1 au lieu de True pour les cases à cocher Airtable
+                sync_column: True  # Pour les cases à cocher Airtable
             }
             
             # Log de débogage
@@ -249,8 +249,9 @@ class AirtableAPI:
             
             # Mettre à jour le statut global uniquement si tout est synchronisé
             if all_synced:
+                # CORRECTION: Utiliser True au lieu de 1 pour les cases à cocher
                 self.table.update(record_id, {
-                    AIRTABLE_SYNCED_COLUMN: 1  # Utiliser 1 au lieu de True pour les cases à cocher Airtable
+                    AIRTABLE_SYNCED_COLUMN: True  # Pour les cases à cocher Airtable
                 })
                 logger.info(f"Toutes les factures sont synchronisées pour l'enregistrement {record_id}")
         except Exception as e:
