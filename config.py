@@ -1,6 +1,6 @@
 """
 Configuration corrigée pour l'intégration Airtable-Sellsy
-avec gestion des colonnes manquantes
+avec gestion des colonnes manquantes et mapping précis des colonnes de factures
 """
 import os
 
@@ -9,18 +9,25 @@ AIRTABLE_API_KEY = os.environ.get("AIRTABLE_API_KEY")
 AIRTABLE_BASE_ID = os.environ.get("AIRTABLE_BASE_ID")
 AIRTABLE_TABLE_NAME = os.environ.get("AIRTABLE_TABLE_NAME")
 
-# Noms des colonnes Airtable pour les factures fournisseurs
+# Noms des colonnes Airtable pour les factures fournisseurs - VÉRIFIÉS ET CONFIRMÉS
 AIRTABLE_INVOICE_FILE_COLUMNS = [
     "Facture 1 (from Documents Abonnés 3)",
     "Facture 2 (from Documents Abonnés 3)",
     "Facture 3 (from Documents Abonnés 3)"
 ]
 
-# Colonnes de statut de synchronisation pour chaque facture
+# Colonnes de statut de synchronisation pour chaque facture - VÉRIFIÉES ET CONFIRMÉES
 AIRTABLE_SYNC_STATUS_COLUMNS = {
     "Facture 1 (from Documents Abonnés 3)": "Sync_Status_Facture_1",
     "Facture 2 (from Documents Abonnés 3)": "Sync_Status_Facture_2",
     "Facture 3 (from Documents Abonnés 3)": "Sync_Status_Facture_3"
+}
+
+# OPTIMISATION: Ajout d'un mapping inverse pour faciliter les recherches
+AIRTABLE_FACTURE_BY_SYNC_STATUS = {
+    "Sync_Status_Facture_1": "Facture 1 (from Documents Abonnés 3)",
+    "Sync_Status_Facture_2": "Facture 2 (from Documents Abonnés 3)",
+    "Sync_Status_Facture_3": "Facture 3 (from Documents Abonnés 3)"
 }
 
 # IMPORTANT: Ces colonnes sont maintenant définies comme vides par défaut
@@ -60,4 +67,4 @@ SELLSY_WEBHOOK_TOKEN = os.environ.get("SELLSY_WEBHOOK_TOKEN", "")
 
 # Paramètres de synchronisation
 SYNC_INTERVAL_MINUTES = 60  # Intervalle de synchronisation pour GitHub Actions
-BATCH_SIZE = 100  # Nombre de factures à traiter par lot - AUGMENTÉ pour traiter plus de factures
+BATCH_SIZE = 100  # Nombre de factures à traiter par lot
