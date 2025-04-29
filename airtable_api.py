@@ -14,10 +14,12 @@ from config import (
     AIRTABLE_INVOICE_FILE_COLUMNS,
     AIRTABLE_CREATED_DATE_COLUMN,
     AIRTABLE_SYNCED_COLUMN,
-    AIRTABLE_SELLSY_ID_COLUMN,  # Maintenant défini dans config.py
+    AIRTABLE_SELLSY_ID_COLUMN,
     AIRTABLE_SYNC_STATUS_COLUMNS,
     AIRTABLE_SELLSY_ID_COLUMNS,
-    AIRTABLE_SUBSCRIBER_ID_COLUMN
+    AIRTABLE_SUBSCRIBER_ID_COLUMN,
+    AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN,
+    AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN
 )
 
 # Configuration du logging
@@ -35,8 +37,7 @@ class AirtableAPI:
 
     def get_unsynchronized_invoices(self, limit=None):
         """
-        Récupère les factures fournisseurs non encore synchronisées avec Sellsy,
-        créées à partir d'aujourd'hui
+        Récupère les factures fournisseurs non encore synchronisées avec Sellsy
         
         Args:
             limit (int, optional): Nombre maximum de factures à récupérer
@@ -49,10 +50,10 @@ class AirtableAPI:
         
         # Approche simplifiée pour la formule
         # Au lieu d'utiliser IS_ATTACHMENT qui peut causer des problèmes
-        # Nous allons filtrer en fonction des statuts de synchronisation 
-        # et vérifier la présence de pièces jointes après le filtrage
+        # Nous allons filtrer en fonction des statuts de synchronisation
         formula_conditions = []
         
+        # Pour chaque colonne de facture, vérifier si le statut est vide ou false
         for column, sync_column in AIRTABLE_SYNC_STATUS_COLUMNS.items():
             # Vérifier seulement si le statut est BLANK() ou FALSE()
             formula_conditions.append(f"OR({sync_column}=BLANK(), {sync_column}=FALSE())")
@@ -133,7 +134,7 @@ class AirtableAPI:
             file_column (str): Nom de la colonne contenant le fichier à télécharger
             
         Returns:
-            str: Chemin vers le fichier téléchargé, ou None en cas d'échec
+            tuple: (Chemin vers le fichier téléchargé, nom original du fichier) ou (None, None) en cas d'échec
         """
         try:
             fields = record.get('fields', {})
@@ -141,7 +142,7 @@ class AirtableAPI:
             
             if not attachments:
                 logger.warning(f"Aucune pièce jointe trouvée dans la colonne {file_column} pour l'enregistrement {record.get('id')}")
-                return None
+                return None, None
                 
             # Récupérer la première pièce jointe
             attachment = attachments[0]
@@ -150,7 +151,7 @@ class AirtableAPI:
             
             if not file_url:
                 logger.warning(f"URL de pièce jointe manquante dans {file_column}")
-                return None
+                return None, None
                 
             # Créer un fichier temporaire avec l'extension du fichier original
             _, file_extension = os.path.splitext(file_name)
@@ -167,11 +168,11 @@ class AirtableAPI:
                     f.write(chunk)
                     
             logger.info(f"Fichier téléchargé avec succès depuis {file_column}: {file_name} -> {temp_file_path}")
-            return temp_file_path
+            return temp_file_path, file_name
             
         except Exception as e:
             logger.error(f"Erreur lors du téléchargement du fichier depuis {file_column}: {e}")
-            return None
+            return None, None
 
     def mark_file_as_synchronized(self, record_id, file_column, sellsy_id=None):
         """
@@ -237,23 +238,31 @@ class AirtableAPI:
             
             # Vérifier si toutes les factures avec pièces jointes sont synchronisées
             all_synced = True
+            has_attachments = False  # Pour vérifier s'il y a au moins une pièce jointe
             
             for column in AIRTABLE_INVOICE_FILE_COLUMNS:
                 attachments = fields.get(column, [])
-                sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
-                
-                # Si la colonne a un fichier mais n'est pas synchronisée
-                if attachments and sync_column and not fields.get(sync_column, False):
-                    all_synced = False
-                    break
+                if attachments:
+                    has_attachments = True
+                    sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
+                    
+                    # Si la colonne a un fichier mais n'est pas synchronisée
+                    if sync_column and not fields.get(sync_column, False):
+                        all_synced = False
+                        break
             
-            # Mettre à jour le statut global uniquement si tout est synchronisé
-            if all_synced:
-                # CORRECTION: Utiliser True au lieu de 1 pour les cases à cocher
+            # Mettre à jour le statut global uniquement si tout est synchronisé ET il y a au moins une pièce jointe
+            if all_synced and has_attachments:
                 self.table.update(record_id, {
                     AIRTABLE_SYNCED_COLUMN: True  # Pour les cases à cocher Airtable
                 })
-                logger.info(f"Toutes les factures sont synchronisées pour l'enregistrement {record_id}")
+                logger.info(f"Toutes les factures sont synchronisées pour l'enregistrement {record_id} - Champ global mis à jour")
+            elif not all_synced:
+                # Si au moins une facture n'est pas synchronisée, s'assurer que le champ global est à False
+                self.table.update(record_id, {
+                    AIRTABLE_SYNCED_COLUMN: False
+                })
+                logger.info(f"Certaines factures ne sont pas synchronisées - Champ global mis à False pour {record_id}")
         except Exception as e:
             logger.error(f"Erreur lors de la mise à jour du statut global: {e}")
 
@@ -273,11 +282,17 @@ class AirtableAPI:
         # Récupérer le numéro d'abonné si disponible
         subscriber_id = fields.get(AIRTABLE_SUBSCRIBER_ID_COLUMN, "")
         
+        # Récupérer le nom et prénom si disponibles
+        first_name = fields.get(AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN, "")
+        last_name = fields.get(AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN, "")
+        
         # Structure minimale pour l'envoi à l'OCR
         invoice_data = {
             "record_id": record.get('id'),
             "subscriber_id": subscriber_id,
             "file_column": file_column,
+            "first_name": first_name,
+            "last_name": last_name,
             "reference": "",  # Laissé vide pour que l'OCR le détecte automatiquement
             "date": "",       # Laissé vide pour que l'OCR le détecte automatiquement
             "supplier_name": "", # Laissé vide pour que l'OCR le détecte automatiquement
