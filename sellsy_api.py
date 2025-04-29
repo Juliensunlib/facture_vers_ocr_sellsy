@@ -155,16 +155,29 @@ class SellsyAPIV2:
                 }
                 
                 # CORRECTION: Utiliser le bon endpoint pour l'OCR des factures fournisseurs
-                # Ancienne URL: "purchase/bills/parseFile"
-                # Nouvelle URL: "purchases/scan"
+                # D'après la documentation Sellsy V2, l'endpoint correct est:
                 logger.info(f"Envoi de la facture vers l'OCR Sellsy (détection automatique)")
-                result = self._make_request("POST", "purchases/scan", data=form_data, files=files)
+                
+                # Essayer d'abord avec l'endpoint pour les factures d'achat
+                endpoint = "ocr/pur-invoice"
+                result = self._make_request("POST", endpoint, data=form_data, files=files)
+                
+                if not result:
+                    # Si échec, essayer un endpoint alternatif
+                    logger.warning(f"Échec avec l'endpoint {endpoint}, tentative avec un endpoint alternatif")
+                    
+                    # Réouvrir le fichier car il a été consommé
+                    f.seek(0)
+                    
+                    # Tenter avec un autre endpoint possible
+                    endpoint = "purchases/bills/parseFile"
+                    result = self._make_request("POST", endpoint, data=form_data, files=files)
                 
                 if result:
-                    logger.info(f"Facture envoyée avec succès à l'OCR: {json.dumps(result)[:200]}...")
+                    logger.info(f"Facture envoyée avec succès à l'OCR via {endpoint}: {json.dumps(result)[:200]}...")
                     return result
                 else:
-                    logger.error("Échec de l'envoi à l'OCR Sellsy")
+                    logger.error("Échec de l'envoi à l'OCR Sellsy avec tous les endpoints tentés")
                     return None
         except Exception as e:
             logger.error(f"Erreur lors de l'envoi de la facture à l'OCR: {e}")
