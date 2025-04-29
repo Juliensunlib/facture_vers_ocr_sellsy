@@ -67,6 +67,7 @@ def sync_invoices_to_sellsy():
                 continue
                 
             # Envoyer par email à l'OCR Sellsy
+            logger.info(f"Envoi du PDF {pdf_path} par email vers l'OCR Sellsy")
             email_result = email_client.send_invoice_to_ocr(invoice_data, pdf_path)
             
             if not email_result:
@@ -83,8 +84,15 @@ def sync_invoices_to_sellsy():
                 elif "id" in email_result:
                     sellsy_id = email_result["id"]
             
+            # Afficher des informations détaillées pour faciliter le débogage
+            logger.info(f"Email envoyé avec succès. Résultat: {email_result}")
+            logger.info(f"Mise à jour du statut dans Airtable pour l'enregistrement {record_id}, colonne {file_column}")
+            
             # Marquer cette facture spécifique comme synchronisée dans Airtable
-            airtable.mark_file_as_synchronized(record_id, file_column, sellsy_id)
+            if airtable.mark_file_as_synchronized(record_id, file_column, sellsy_id):
+                logger.info(f"Statut de synchronisation mis à jour avec succès")
+            else:
+                logger.warning(f"Échec de la mise à jour du statut de synchronisation")
             
             logger.info(f"Facture depuis la colonne {file_column} envoyée par email avec succès (ID de suivi: {sellsy_id})")
             success_count += 1
