@@ -8,7 +8,7 @@ import requests
 import os
 import tempfile
 import logging
-from config_fixed import (
+from config import (  # Changé config_fixed en config
     AIRTABLE_API_KEY, 
     AIRTABLE_BASE_ID, 
     AIRTABLE_TABLE_NAME,
