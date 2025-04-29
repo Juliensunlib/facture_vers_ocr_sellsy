@@ -38,9 +38,17 @@ AIRTABLE_SELLSY_ID_COLUMN = "ID_Sellsy"  # Même que AIRTABLE_SUBSCRIBER_ID_COLU
 AIRTABLE_CREATED_DATE_COLUMN = "Created_Time"  # Colonne contenant la date de création de l'enregistrement
 AIRTABLE_SYNCED_COLUMN = "Synchronisé_Sellsy"  # Colonne principale pour marquer comme synchronisé (ancienne, gardée pour compatibilité)
 
-# Configuration Sellsy API V2
-SELLSY_CLIENT_ID = os.environ.get("SELLSY_CLIENT_ID")
-SELLSY_CLIENT_SECRET = os.environ.get("SELLSY_CLIENT_SECRET")
+# Configuration email pour l'OCR Sellsy
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")  # SMTP par défaut Gmail
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))        # Port TLS par défaut
+EMAIL_USER = os.environ.get("EMAIL_USER", "dsi@sunlib.fr")   # Votre adresse email
+EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")        # Mot de passe ou token d'app
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "dsi@sunlib.fr")   # Adresse expéditeur
+EMAIL_OCR_TO = os.environ.get("EMAIL_OCR_TO", "ocr.200978@sellsy.net")  # Adresse OCR Sellsy
+
+# Conservation des anciens paramètres Sellsy pour compatibilité
+SELLSY_CLIENT_ID = os.environ.get("SELLSY_CLIENT_ID", "")
+SELLSY_CLIENT_SECRET = os.environ.get("SELLSY_CLIENT_SECRET", "")
 SELLSY_WEBHOOK_TOKEN = os.environ.get("SELLSY_WEBHOOK_TOKEN", "")
 
 # Paramètres de synchronisation
