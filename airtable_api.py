@@ -46,43 +46,22 @@ class AirtableAPI:
         Returns:
             list: Liste des enregistrements Airtable
         """
-        # Construire une formule plus efficace
-        # On veut récupérer les enregistrements où au moins une des colonnes de synchronisation 
-        # est non cochée (FALSE ou BLANK) ET la colonne correspondante a un attachement
-        formula_parts = []
-        
-        for column, sync_column in AIRTABLE_SYNC_STATUS_COLUMNS.items():
-            # On recherche: il y a un attachement ET le statut de synchro est soit FALSE soit non renseigné
-            formula_parts.append(
-                f"AND(NOT(BLANK({column})), OR({sync_column}=FALSE(), BLANK({sync_column})))"
-            )
-        
-        # Combine all conditions with OR - nous voulons tous les enregistrements qui ont
-        # au moins une colonne non synchronisée avec un attachement
-        if formula_parts:
-            formula = f"OR({','.join(formula_parts)})"
-        else:
-            formula = ""
-        
-        logger.debug(f"Formule Airtable: {formula}")
-            
         try:
-            # Récupération des enregistrements avec la formule améliorée
-            if formula:
-                if limit:
-                    records = self.table.all(formula=formula, max_records=limit)
-                else:
-                    records = self.table.all(formula=formula)
+            # Approche simplifiée: récupérer tous les enregistrements et filtrer en mémoire
+            # Cela évite les problèmes de formules complexes avec l'API Airtable
+            logger.info("Récupération des enregistrements Airtable...")
+            
+            # Récupérer uniquement les enregistrements non synchronisés (champ global)
+            formula = f"{{{AIRTABLE_SYNCED_COLUMN}}}=FALSE()"
+            
+            if limit:
+                records = self.table.all(formula=formula, max_records=limit)
             else:
-                if limit:
-                    records = self.table.all(max_records=limit)
-                else:
-                    records = self.table.all()
+                records = self.table.all(formula=formula)
             
-            logger.info(f"Récupération de {len(records)} enregistrements avec factures non synchronisées")
+            logger.info(f"Récupération de {len(records)} enregistrements non synchronisés globalement")
             
-            # Double vérification de la présence d'attachements et du statut
-            # Cette étape est redondante avec la formule mais garantit la fiabilité
+            # Filtrer en mémoire pour trouver les enregistrements avec des factures non synchronisées
             validated_records = []
             for record in records:
                 fields = record.get('fields', {})
