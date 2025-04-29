@@ -9,10 +9,12 @@ AIRTABLE_BASE_ID = os.environ.get("AIRTABLE_BASE_ID")
 AIRTABLE_TABLE_NAME = os.environ.get("AIRTABLE_TABLE_NAME")
 
 # Noms des colonnes Airtable pour les factures fournisseurs
-AIRTABLE_INVOICE_FILE_COLUMN = "Facture_PDF"  # Colonne contenant les fichiers PDF
-AIRTABLE_INVOICE_DATE_COLUMN = "Date_Facture"  # Colonne contenant la date de facture
-AIRTABLE_INVOICE_REF_COLUMN = "Reference_Facture"  # Colonne contenant la référence de facture
-AIRTABLE_SUPPLIER_COLUMN = "Fournisseur"  # Colonne contenant le nom du fournisseur
+AIRTABLE_INVOICE_FILE_COLUMNS = [
+    "Facture 1 (from Documents Abonnés 3)",
+    "Facture 2 (from Documents Abonnés 3)",
+    "Facture 3 (from Documents Abonnés 3)"
+]
+AIRTABLE_CREATED_DATE_COLUMN = "Created_Time"  # Colonne contenant la date de création de l'enregistrement
 AIRTABLE_SYNCED_COLUMN = "Synchronisé_Sellsy"  # Colonne pour marquer comme synchronisé
 AIRTABLE_SELLSY_ID_COLUMN = "ID_Sellsy"  # Colonne pour stocker l'ID Sellsy
 
