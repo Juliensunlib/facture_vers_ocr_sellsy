@@ -17,7 +17,6 @@ from config import (
     AIRTABLE_SYNCED_COLUMN,
     AIRTABLE_SELLSY_ID_COLUMN,
     AIRTABLE_SYNC_STATUS_COLUMNS,
-    AIRTABLE_SELLSY_ID_COLUMNS,
     AIRTABLE_SUBSCRIBER_ID_COLUMN,
     AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN,
     AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN
@@ -167,7 +166,7 @@ class AirtableAPI:
         Args:
             record_id (str): ID de l'enregistrement Airtable
             file_column (str): Nom de la colonne contenant le fichier synchronisé
-            sellsy_id (str, optional): ID Sellsy de la facture créée
+            sellsy_id (str, optional): ID Sellsy de la facture créée (non utilisé)
             
         Returns:
             bool: True si la mise à jour a réussi, False sinon
@@ -180,21 +179,13 @@ class AirtableAPI:
                 logger.error(f"Colonne de statut de synchronisation non trouvée pour {file_column}")
                 return False
             
-            # Identifier la colonne pour stocker l'ID Sellsy si applicable
-            sellsy_id_column = AIRTABLE_SELLSY_ID_COLUMNS.get(file_column)
-            
             # Logging des valeurs avant mise à jour
             logger.info(f"Mise à jour pour le record {record_id}, colonne de statut {sync_column}")
                 
-            # Préparer les données à mettre à jour
+            # Préparer les données à mettre à jour - uniquement le statut de synchronisation
             update_data = {
                 sync_column: True  # Utiliser True pour les cases à cocher Airtable
             }
-            
-            # Si un ID Sellsy est fourni et qu'une colonne dédiée existe, l'ajouter
-            if sellsy_id and sellsy_id_column:
-                update_data[sellsy_id_column] = sellsy_id
-                logger.info(f"Stockage de l'ID Sellsy {sellsy_id} dans la colonne {sellsy_id_column}")
             
             # Log de débogage
             logger.info(f"Données de mise à jour: {update_data}")
@@ -205,7 +196,7 @@ class AirtableAPI:
             # Log de débogage - Afficher le résultat de la mise à jour
             logger.info(f"Résultat de la mise à jour: {result}")
             
-            logger.info(f"Facture dans {file_column} marquée comme synchronisée pour l'enregistrement {record_id} (Sellsy ID: {sellsy_id})")
+            logger.info(f"Facture dans {file_column} marquée comme synchronisée pour l'enregistrement {record_id}")
             
             # Mettre à jour le statut global
             self._update_global_sync_status(record_id)
