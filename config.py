@@ -4,6 +4,10 @@ avec gestion des colonnes manquantes et mapping précis des colonnes de factures
 """
 import os
 
+# NOUVELLE OPTION: Faire confiance au mapping défini plutôt que de le détecter dynamiquement
+# Mettre à True pour utiliser les colonnes définies même si elles semblent absentes
+TRUST_COLUMN_MAPPING = True
+
 # Configuration Airtable
 AIRTABLE_API_KEY = os.environ.get("AIRTABLE_API_KEY")
 AIRTABLE_BASE_ID = os.environ.get("AIRTABLE_BASE_ID")
