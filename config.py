@@ -32,6 +32,10 @@ AIRTABLE_SELLSY_ID_COLUMNS = {
 # Colonne existante pour l'ID de l'abonné
 AIRTABLE_SUBSCRIBER_ID_COLUMN = "ID_Sellsy"  # Contient le numéro d'abonné
 
+# Colonnes pour les informations de l'abonné
+AIRTABLE_SUBSCRIBER_FIRSTNAME_COLUMN = "Prenom"  # Prénom de l'abonné
+AIRTABLE_SUBSCRIBER_LASTNAME_COLUMN = "Nom"  # Nom de l'abonné
+
 # Ajout de la variable manquante pour la compatibilité avec l'ancien code
 AIRTABLE_SELLSY_ID_COLUMN = "ID_Sellsy"  # Même que AIRTABLE_SUBSCRIBER_ID_COLUMN
 
@@ -53,4 +57,4 @@ SELLSY_WEBHOOK_TOKEN = os.environ.get("SELLSY_WEBHOOK_TOKEN", "")
 
 # Paramètres de synchronisation
 SYNC_INTERVAL_MINUTES = 60  # Intervalle de synchronisation pour GitHub Actions
-BATCH_SIZE = 50  # Nombre de factures à traiter par lot - AUGMENTÉ pour traiter plus de factures
+BATCH_SIZE = 100  # Nombre de factures à traiter par lot - AUGMENTÉ pour traiter plus de factures
