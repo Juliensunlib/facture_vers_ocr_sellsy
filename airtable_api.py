@@ -49,16 +49,14 @@ class AirtableAPI:
         try:
             logger.info("Récupération des enregistrements Airtable...")
             
-            # Modifier la formule pour inclure à la fois FALSE et NULL (vide)
-            # Inclut les enregistrements où le champ de synchronisation est FALSE OU vide
-            formula = f"OR({{{AIRTABLE_SYNCED_COLUMN}}}=FALSE(), {{{AIRTABLE_SYNCED_COLUMN}}}='')"
-            
+            # Récupérer tous les enregistrements sans filtrage initial
+            # Nous filtrerons en mémoire pour plus de fiabilité
             if limit:
-                records = self.table.all(formula=formula, max_records=limit)
+                records = self.table.all(max_records=limit)
             else:
-                records = self.table.all(formula=formula)
+                records = self.table.all()
             
-            logger.info(f"Récupération de {len(records)} enregistrements non synchronisés globalement")
+            logger.info(f"Récupération de {len(records)} enregistrements au total")
             
             # Filtrer en mémoire pour trouver les enregistrements avec des factures non synchronisées
             validated_records = []
