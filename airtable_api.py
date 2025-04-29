@@ -45,27 +45,28 @@ class AirtableAPI:
         Returns:
             list: Liste des enregistrements Airtable
         """
-        # Obtenir la date du jour au format YYYY-MM-DD
-        today = datetime.now().strftime("%Y-%m-%d")
+        # Construire une formule plus efficace
+        # On veut récupérer les enregistrements où au moins une des colonnes de synchronisation 
+        # est non cochée (FALSE ou BLANK) ET la colonne correspondante a un attachement
+        formula_parts = []
         
-        # Approche simplifiée pour la formule
-        # Au lieu d'utiliser IS_ATTACHMENT qui peut causer des problèmes
-        # Nous allons filtrer en fonction des statuts de synchronisation
-        formula_conditions = []
-        
-        # Pour chaque colonne de facture, vérifier si le statut est vide ou false
         for column, sync_column in AIRTABLE_SYNC_STATUS_COLUMNS.items():
-            # Vérifier seulement si le statut est BLANK() ou FALSE()
-            formula_conditions.append(f"OR({sync_column}=BLANK(), {sync_column}=FALSE())")
+            # On recherche: il y a un attachement ET le statut de synchro est soit FALSE soit non renseigné
+            formula_parts.append(
+                f"AND(NOT(BLANK({column})), OR({sync_column}=FALSE(), BLANK({sync_column})))"
+            )
         
-        # Combine all conditions with OR
-        if formula_conditions:
-            formula = f"OR({','.join(formula_conditions)})"
+        # Combine all conditions with OR - nous voulons tous les enregistrements qui ont
+        # au moins une colonne non synchronisée avec un attachement
+        if formula_parts:
+            formula = f"OR({','.join(formula_parts)})"
         else:
             formula = ""
+        
+        logger.debug(f"Formule Airtable: {formula}")
             
         try:
-            # Récupération des enregistrements
+            # Récupération des enregistrements avec la formule améliorée
             if formula:
                 if limit:
                     records = self.table.all(formula=formula, max_records=limit)
@@ -76,26 +77,31 @@ class AirtableAPI:
                     records = self.table.all(max_records=limit)
                 else:
                     records = self.table.all()
-                
-            # Filtrer manuellement les enregistrements qui ont réellement des pièces jointes
-            filtered_records = []
+            
+            logger.info(f"Récupération de {len(records)} enregistrements avec factures non synchronisées")
+            
+            # Double vérification de la présence d'attachements et du statut
+            # Cette étape est redondante avec la formule mais garantit la fiabilité
+            validated_records = []
             for record in records:
                 fields = record.get('fields', {})
+                has_unsync_file = False
+                
                 for column in AIRTABLE_INVOICE_FILE_COLUMNS:
-                    # Vérifier si la colonne a un fichier attaché
                     attachments = fields.get(column, [])
                     if attachments:
-                        # Vérifier le statut de synchronisation
                         sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
-                        is_synced = fields.get(sync_column, False) if sync_column else True
+                        is_synced = fields.get(sync_column, False) if sync_column else False
                         
-                        # Si au moins une colonne a un fichier et n'est pas synchronisée, ajouter l'enregistrement
                         if not is_synced:
-                            filtered_records.append(record)
+                            has_unsync_file = True
                             break
+                
+                if has_unsync_file:
+                    validated_records.append(record)
             
-            logger.info(f"Récupération de {len(filtered_records)} enregistrements avec factures non synchronisées")
-            return filtered_records
+            logger.info(f"Après validation: {len(validated_records)} enregistrements avec factures non synchronisées")
+            return validated_records
             
         except Exception as e:
             logger.error(f"Erreur lors de la récupération des factures: {e}")
@@ -119,8 +125,9 @@ class AirtableAPI:
             
             # Vérifier si la colonne a un fichier
             if attachments:
-                # Vérifier si la colonne n'est pas marquée comme synchronisée
-                if sync_column and not fields.get(sync_column, False):
+                # Vérifier si la colonne n'est pas marquée comme synchronisée (FALSE ou BLANK)
+                is_synced = fields.get(sync_column, False) if sync_column else False
+                if not is_synced:
                     return column
         
         return None
@@ -194,12 +201,12 @@ class AirtableAPI:
                 logger.error(f"Colonne de statut de synchronisation non trouvée pour {file_column}")
                 return False
             
-            # Debugging: Afficher les valeurs avant mise à jour
+            # Logging des valeurs avant mise à jour
             logger.info(f"Mise à jour pour le record {record_id}, colonne de statut {sync_column}")
                 
-            # CORRECTION: Utiliser True au lieu de 1 pour les cases à cocher
+            # Utiliser True pour les cases à cocher Airtable
             update_data = {
-                sync_column: True  # Pour les cases à cocher Airtable
+                sync_column: True
             }
             
             # Log de débogage
@@ -213,7 +220,7 @@ class AirtableAPI:
             
             logger.info(f"Facture dans {file_column} marquée comme synchronisée pour l'enregistrement {record_id} (Sellsy ID: {sellsy_id})")
             
-            # Vérifier si toutes les factures sont synchronisées pour mettre à jour la colonne globale
+            # Mettre à jour le statut global
             self._update_global_sync_status(record_id)
             
             return True
@@ -229,40 +236,56 @@ class AirtableAPI:
             record_id (str): ID de l'enregistrement Airtable
         """
         try:
-            # Récupérer l'enregistrement complet
+            # Récupérer l'enregistrement complet pour obtenir les statuts à jour
             record = self.table.get(record_id)
             if not record:
+                logger.warning(f"Enregistrement {record_id} non trouvé lors de la mise à jour du statut global")
                 return
                 
             fields = record.get('fields', {})
             
-            # Vérifier si toutes les factures avec pièces jointes sont synchronisées
+            # Variables pour le suivi
             all_synced = True
-            has_attachments = False  # Pour vérifier s'il y a au moins une pièce jointe
+            has_attachments = False
             
+            # Pour chaque colonne de facture
             for column in AIRTABLE_INVOICE_FILE_COLUMNS:
                 attachments = fields.get(column, [])
+                
+                # Si cette colonne a un fichier attaché
                 if attachments:
                     has_attachments = True
                     sync_column = AIRTABLE_SYNC_STATUS_COLUMNS.get(column)
                     
-                    # Si la colonne a un fichier mais n'est pas synchronisée
-                    if sync_column and not fields.get(sync_column, False):
+                    # Vérifier si le statut est explicitement True
+                    # Si le champ n'existe pas (None) ou est False, considérer comme non synchronisé
+                    sync_status = fields.get(sync_column, False)
+                    if not sync_status:
                         all_synced = False
+                        logger.info(f"La colonne {column} n'est pas synchronisée, statut global reste à False")
                         break
             
+            logger.info(f"État de synchronisation pour record {record_id}: has_attachments={has_attachments}, all_synced={all_synced}")
+            
             # Mettre à jour le statut global uniquement si tout est synchronisé ET il y a au moins une pièce jointe
-            if all_synced and has_attachments:
-                self.table.update(record_id, {
-                    AIRTABLE_SYNCED_COLUMN: True  # Pour les cases à cocher Airtable
-                })
-                logger.info(f"Toutes les factures sont synchronisées pour l'enregistrement {record_id} - Champ global mis à jour")
-            elif not all_synced:
-                # Si au moins une facture n'est pas synchronisée, s'assurer que le champ global est à False
-                self.table.update(record_id, {
-                    AIRTABLE_SYNCED_COLUMN: False
-                })
-                logger.info(f"Certaines factures ne sont pas synchronisées - Champ global mis à False pour {record_id}")
+            current_global_status = fields.get(AIRTABLE_SYNCED_COLUMN, False)
+            
+            if has_attachments:
+                if all_synced and not current_global_status:
+                    # Si tout est synchronisé mais le statut global est False ou absent
+                    self.table.update(record_id, {
+                        AIRTABLE_SYNCED_COLUMN: True
+                    })
+                    logger.info(f"Toutes les factures sont synchronisées - Champ global mis à jour à TRUE pour {record_id}")
+                elif not all_synced and current_global_status:
+                    # Si au moins une facture n'est pas synchronisée et le statut global est True
+                    self.table.update(record_id, {
+                        AIRTABLE_SYNCED_COLUMN: False
+                    })
+                    logger.info(f"Certaines factures ne sont pas synchronisées - Champ global mis à jour à FALSE pour {record_id}")
+            else:
+                logger.info(f"Aucune pièce jointe trouvée pour l'enregistrement {record_id} - Aucune mise à jour du statut global")
+        
         except Exception as e:
             logger.error(f"Erreur lors de la mise à jour du statut global: {e}")
 
