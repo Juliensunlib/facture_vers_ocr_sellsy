@@ -37,13 +37,14 @@ class EmailSender:
         
         logger.info("Client d'envoi d'email initialisé")
         
-    def send_invoice_to_ocr(self, invoice_data, file_path):
+    def send_invoice_to_ocr(self, invoice_data, file_path, original_filename=None):
         """
         Envoie une facture fournisseur à l'OCR de Sellsy par email
         
         Args:
-            invoice_data (dict): Données minimales de la facture (peut être vide)
+            invoice_data (dict): Données minimales de la facture
             file_path (str): Chemin vers le fichier PDF de la facture
+            original_filename (str, optional): Nom original du fichier si disponible
             
         Returns:
             dict: Informations sur la facture envoyée, ou None en cas d'échec
@@ -59,9 +60,11 @@ class EmailSender:
             msg['To'] = self.to_addr
             msg['Date'] = formatdate(localtime=True)
             
-            # Identifier l'abonné si disponible
+            # Récupérer les informations d'abonné
             subscriber_id = invoice_data.get("subscriber_id", "")
             record_id = invoice_data.get("record_id", "")
+            first_name = invoice_data.get("first_name", "")
+            last_name = invoice_data.get("last_name", "")
             
             # Créer le sujet avec référence à l'ID Airtable pour le suivi
             subject = f"Facture fournisseur pour traitement OCR - Ref:{record_id}"
@@ -75,8 +78,30 @@ class EmailSender:
             body += f"ID Airtable: {record_id}\n"
             if subscriber_id:
                 body += f"ID Abonné: {subscriber_id}\n"
+            if first_name or last_name:
+                body += f"Abonné: {first_name} {last_name}\n"
             
             msg.attach(MIMEText(body, 'plain'))
+            
+            # Créer un nom de fichier personnalisé incluant nom et prénom si disponibles
+            base_filename = os.path.basename(file_path)
+            _, ext = os.path.splitext(base_filename)
+            
+            if original_filename:
+                base_filename = original_filename
+            
+            # Nouveau nom de fichier avec nom et prénom
+            if first_name and last_name:
+                custom_filename = f"{last_name}_{first_name}_facture{ext}"
+            elif last_name:
+                custom_filename = f"{last_name}_facture{ext}"
+            elif first_name:
+                custom_filename = f"{first_name}_facture{ext}"
+            else:
+                # Si ni nom ni prénom n'est disponible, utiliser l'ID
+                custom_filename = f"facture_{subscriber_id or record_id}{ext}"
+                
+            logger.info(f"Nom de fichier personnalisé: {custom_filename}")
             
             # Joindre le fichier PDF
             with open(file_path, 'rb') as f:
@@ -84,7 +109,7 @@ class EmailSender:
                 part.set_payload(f.read())
                 encoders.encode_base64(part)
                 part.add_header('Content-Disposition', 
-                               f'attachment; filename="{os.path.basename(file_path)}"')
+                               f'attachment; filename="{custom_filename}"')
                 msg.attach(part)
                 
             # Connexion au serveur SMTP et envoi
@@ -104,7 +129,8 @@ class EmailSender:
                 "data": {
                     "id": f"email-{record_id}",  # ID fictif pour le suivi
                     "method": "email",
-                    "recipient": self.to_addr
+                    "recipient": self.to_addr,
+                    "filename": custom_filename
                 }
             }
             
