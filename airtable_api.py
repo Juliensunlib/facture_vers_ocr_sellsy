@@ -1,6 +1,7 @@
 """
 Client corrigé pour l'API Airtable - Récupération des factures fournisseurs
 Adaptation pour tenir compte des champs manquants ou différents
+Version améliorée pour gérer l'absence des colonnes ID_Sellsy_Facture_
 """
 from pyairtable import Table
 import requests
@@ -47,10 +48,19 @@ class AirtableAPI:
             record = self.table.first()
             if not record:
                 logger.warning("Table vide ou inaccessible, impossible de vérifier sa structure")
+                # Initialiser avec des valeurs par défaut en cas d'échec
+                self.has_subscriber_id = False
+                self.has_firstname = False
+                self.has_lastname = False
+                self.has_global_sync = False
+                self.sync_status_columns = {}
+                self.sellsy_id_columns = {}
                 return
                 
             fields = record.get('fields', {})
             field_names = set(fields.keys())
+            
+            logger.info(f"Champs détectés dans Airtable: {', '.join(field_names)}")
             
             # Vérifier les champs globaux
             self.has_subscriber_id = AIRTABLE_SUBSCRIBER_ID_COLUMN in field_names
@@ -63,11 +73,14 @@ class AirtableAPI:
             for file_col, status_col in AIRTABLE_SYNC_STATUS_COLUMNS.items():
                 if file_col in field_names and status_col in field_names:
                     self.sync_status_columns[file_col] = status_col
+                elif file_col in field_names:
+                    logger.warning(f"Colonne de fichier {file_col} existe mais pas sa colonne de statut {status_col}")
+                    # Continuer sans le statut, on considérera toujours non synchronisé
                     
             # Vérifier les champs d'ID Sellsy
             self.sellsy_id_columns = {}
             for file_col, id_col in AIRTABLE_SELLSY_ID_COLUMNS.items():
-                if file_col in field_names and id_col in field_names:
+                if id_col and file_col in field_names and id_col in field_names:
                     self.sellsy_id_columns[file_col] = id_col
                     
             # Journaliser les résultats
@@ -86,7 +99,7 @@ class AirtableAPI:
             self.has_firstname = False
             self.has_lastname = False
             self.has_global_sync = False
-            self.sync_status_columns = AIRTABLE_SYNC_STATUS_COLUMNS
+            self.sync_status_columns = {}
             self.sellsy_id_columns = {}
 
     def get_unsynchronized_invoices(self, limit=None):
@@ -256,6 +269,8 @@ class AirtableAPI:
             if sellsy_id and sellsy_id_column:
                 update_data[sellsy_id_column] = sellsy_id
                 logger.info(f"Stockage de l'ID Sellsy {sellsy_id} dans la colonne {sellsy_id_column}")
+            elif sellsy_id:
+                logger.info(f"ID Sellsy {sellsy_id} généré mais pas de colonne pour le stocker")
             
             # Log de débogage
             logger.info(f"Données de mise à jour: {update_data}")
