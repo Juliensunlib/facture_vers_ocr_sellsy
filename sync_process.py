@@ -1,7 +1,7 @@
 """
 Script principal corrigé pour synchroniser les factures fournisseurs d'Airtable vers Sellsy par email OCR
 Version robuste qui gère les cas où certains champs peuvent être manquants
-Optimisé pour traiter un grand nombre de factures (jusqu'à 100)
+Balaye toute la base Airtable sans limitation
 """
 import os
 import logging
@@ -38,8 +38,8 @@ def sync_invoices_to_sellsy():
     email_client = EmailSender()
     
     # Récupérer tous les enregistrements qui ont au moins une facture non synchronisée
-    # Utiliser une limite plus élevée pour s'assurer de traiter toutes les factures (40+)
-    all_records = airtable.get_unsynchronized_invoices(limit=BATCH_SIZE)
+    # Pas de limite pour balayer toute la base
+    all_records = airtable.get_unsynchronized_invoices()
     
     if not all_records:
         logger.info("Aucune facture à synchroniser")
